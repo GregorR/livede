@@ -1,0 +1,41 @@
+<!doctype html>
+<html>
+    <head>
+        <title>LiveDE</title>
+        <script type="text/javascript" src="codemirror/lib/codemirror.js"></script>
+        <link rel="stylesheet" href="codemirror/lib/codemirror.css" />
+        <script type="text/javascript" src="codemirror/mode/python/python.js"></script>
+
+        <style type="text/css">
+            #master {
+                display: none;
+            }
+
+            #loggedin {
+                display: none;
+            }
+
+            #secondheader {
+                display: none;
+            }
+
+            .CodeMirror {
+                height: auto;
+            }
+        </style>
+    </head>
+    <body style="margin: 0">
+        <div id="header">
+            <span id="master">
+                <button id="login">Log in</button>
+            </span>
+            <span id="loggedin">
+                <button id="lock">Unlock</button>
+                <button id="hide">Hide</button>
+            </span>
+        </div>
+        <div id="secondheader"></div>
+        <div id="ide" style="margin: 0.5em">Connecting...</div>
+        <script type="text/javascript" src="livede.js"></script>
+    </body>
+</html>
