@@ -370,6 +370,7 @@
         ide = CodeMirror(ideUI, {
             autofocus: true,
             indentUnit: 4,
+            lineNumbers: true,
             lineWrapping: true,
             viewportMargin: Infinity,
 
@@ -394,6 +395,7 @@
     // There was a local change
     var localChangeTimeout = null;
     function localChange() {
+        outputClose();
         if (!localChangeTimeout)
             localChangeTimeout = setTimeout(localChangePrime, 250);
     }
@@ -457,6 +459,7 @@
             ideUI.style.top = outputUI.style.top = h + "px";
         }, 100);
     }
+    window.addEventListener("resize", updateUI);
 
     // Run the code
     function run() {

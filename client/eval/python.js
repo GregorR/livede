@@ -21,20 +21,27 @@
     var base = document.location.pathname;
     base = base.slice(base.lastIndexOf("/") + 1);
     languagePluginUrl = base + "pyodide/";
+    var currentPrint = null;
+
+    // Syntax error output always goes to console.log, so capture it
+    var origLog = console.log;
+    console.log = function(val) {
+        if (currentPrint)
+            currentPrint(val + "\n");
+    };
+
+    // We need a global function for pyodide to access to perform printing
+    function pyodidePrint(val) {
+        if (currentPrint)
+            currentPrint(val);
+    }
+    window.pyodidePrint = pyodidePrint;
 
     // Load pyodide
     var scr = document.createElement("script");
     scr.addEventListener("load", onload);
     document.head.appendChild(scr);
     scr.src = "pyodide/pyodide.js";
-
-    // We need a global function for pyodide to access to perform printing
-    var currentPrint = null;
-    function pyodidePrint(val) {
-        if (currentPrint)
-            currentPrint(val);
-    }
-    window.pyodidePrint = pyodidePrint;
 
     function onload() {
         // pyodide is loaded, so add the evaler
@@ -64,7 +71,7 @@
         currentPrint = print;
 
         // Run the given code
-        pyodide.runPythonAsync(code).then(done).catch(doneEx);
+        pyodide.runPythonAsync(code).then(done).catch(done);
 
         function doneEx(ex) {
             // Done but there was an exception
@@ -74,6 +81,7 @@
 
         function done() {
             currentPrint = null;
+            console.log = origLog;
         }
     }
 })();
