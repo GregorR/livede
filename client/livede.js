@@ -9,8 +9,10 @@
 
     // Our critical elements
     var masterUI = dge("master");
-    var logInUI = dge("login");
+    var logInFormUI = dge("loginForm");
+    var logInPasswordUI = dge("loginPassword");
     var loggedInUI = dge("loggedin");
+    var loggedInHiddenUI = dge("loggedinhidden");
     var lockUI = dge("lock");
     var hideUI = dge("hide");
     var ideUI = dge("ide");
@@ -27,7 +29,8 @@
     var docName = pn.slice(pn.lastIndexOf("/") + 1);
 
     // And figure out what was requested by the search
-    var srch = new URL(document.location.href).searchParams;
+    var docURL = new URL(document.location.href);
+    var srch = docURL.searchParams;
     if (srch.has("doc"))
         docName = srch.get("doc");
     if (srch.has("master"))
@@ -70,7 +73,7 @@
                 break;
 
             case prot.ids.loggedin:
-                logInUI.style.display = "none";
+                logInFormUI.style.display = "none";
                 loggedInUI.style.display = "inline";
                 loggedIn = true;
                 if (doc && ide)
@@ -79,6 +82,10 @@
 
             case prot.ids.full:
                 full(msg);
+                break;
+
+            case prot.ids.diff:
+                diff(msg);
                 break;
         }
     };
@@ -120,6 +127,24 @@
         }
     }
 
+    // Received a diff
+    function diff(msg) {
+        var p = prot.diff;
+        var hash = msg.getUint32(p.hash, true);
+        var patches = JSON.parse(decodeText(msg.buffer.slice(p.diff)));
+
+        // FIXME: Need to worry about selection and hash!
+        var from = doc.data;
+        var fromLive = ide ? ide.getValue() : from;
+        doc.data = dmp.patch_apply(patches, from)[0];
+        if (from !== fromLive) {
+            // Conflict in our own data, apply our patch separately
+            ide.setValue(dmp.patch_apply(patches, fromLive))[0];
+        } else {
+            ide.setValue(doc.data);
+        }
+    }
+
     // Load the IDE
     function loadIDE() {
         var mode = doc.language || "javascript";
@@ -154,6 +179,7 @@
         // Get our change as patches
         var from = doc.data;
         var to = ide.getValue();
+        if (from === to) return;
         doc.data = to;
         var diff = dmp.diff_main(from, to);
         dmp.diff_cleanupEfficiency(diff);
@@ -185,15 +211,17 @@
 
     // UI setup
     function setupUI() {
-        logInUI.onclick = logIn;
+        logInFormUI.onsubmit = logIn;
+        hideUI.onclick = hideMenu;
+        loggedInHiddenUI.onclick = showMenu;
     }
 
     // Request a login password
     function logIn() {
-        if (salt === null) return; // Can't do anything 'til we know the salt
+        if (salt === null) return false; // Can't do anything 'til we know the salt
 
-        // FIXME: Obviously don't want to read the password in the clear!
-        var password = prompt("Password");
+        // Hash the password
+        var password = logInPasswordUI.value;
         password = hashStr(salt + password);
         password = hashStr(clientID + password);
 
@@ -204,6 +232,30 @@
         msg.setUint32(0, prot.ids.login, true);
         new Uint8Array(msg.buffer).set(pwbuf, p.password);
         ws.send(msg);
+
+        return false;
+    }
+
+    // Hide the menu
+    function hideMenu() {
+        // Make a URL to hide it with
+        var url = docURL.host + docURL.pathname;
+        if (srch.has("doc"))
+            url += "?doc=" + srch.get("doc");
+
+        // Put it in the span
+        loggedInHiddenUI.innerText = url;
+        loggedInHiddenUI.appendChild(document.createElement("hr"));
+
+        // And swap visibility
+        loggedInUI.style.display = "none";
+        loggedInHiddenUI.style.display = "block";
+    }
+
+    // Show the menu
+    function showMenu() {
+        loggedInUI.style.display = "inline";
+        loggedInHiddenUI.style.display = "none";
     }
 
     // General text encoder

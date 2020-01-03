@@ -207,7 +207,7 @@ function connection(ws) {
 
         // Push the change to other clients
         for (var oid in docd.onchange) {
-            if (oid !== id)
+            if (+oid !== id)
                 docd.onchange[oid](msg);
         }
 

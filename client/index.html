@@ -11,16 +11,15 @@
         <script type="text/javascript" src="diff_match_patch.js"></script>
 
         <style type="text/css">
-            #master {
+            #master, #loggedin, #secondheader {
                 display: none;
             }
 
-            #loggedin {
+            #loggedinhidden {
                 display: none;
-            }
-
-            #secondheader {
-                display: none;
+                margin: 0.5em;
+                font-size: 2em;
+                text-align: center;
             }
 
             .CodeMirror {
@@ -31,12 +30,16 @@
     <body style="margin: 0">
         <div id="header">
             <span id="master">
-                <button id="login">Log in</button>
+                <form id="loginForm">
+                    <input type="password" id="loginPassword" />
+                    <input type="submit" id="loginSubmit" value="Log in" />
+                </form>
             </span>
             <span id="loggedin">
                 <button id="lock">Unlock</button>
                 <button id="hide">Hide</button>
             </span>
+            <span id="loggedinhidden"></span>
         </div>
         <div id="secondheader"></div>
         <div id="ide" style="margin: 0.2em">Connecting...</div>
