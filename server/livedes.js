@@ -89,8 +89,10 @@ function connection(ws) {
             docs[doc] = {onchange: {}, saveTimer: null, data: JSON.parse(fs.readFileSync(doc, "utf8"))};
         docd = docs[doc];
 
-        if (!docd.data.pub)
-            docd.data.pub = {data: ""};
+        if (!docd.data.meta)
+            docd.data.meta = {};
+        if (!docd.data.data)
+            docd.data.data = "";
         if (docd.data.password && Object.keys(docd.onchange).length === 0) {
             // Raw password, replace it with a hashed one
             var salt = docd.data.salt = ~~(Math.random() * 1000000000);
@@ -114,15 +116,24 @@ function connection(ws) {
         msg.writeUInt32LE(id, p.id);
         ws.send(msg);
 
-        // Now send back the current state of the document
+        // Send the document metadata
+        p = prot.meta;
+        var meta = Buffer.from(JSON.stringify(docd.data.meta));
+        msg = Buffer.alloc(p.length + meta.length);
+        msg.writeUInt32LE(prot.ids.meta, 0);
+        meta.copy(msg, p.meta);
+        ws.send(msg);
+
+        // Finally, send the document text
         p = prot.full;
-        var state = Buffer.from(JSON.stringify(docd.data.pub));
-        msg = Buffer.alloc(p.length + state.length);
+        var data = Buffer.from(docd.data.data);
+        msg = Buffer.alloc(p.length + data.length);
         msg.writeUInt32LE(prot.ids.full, 0);
-        state.copy(msg, p.doc);
+        data.copy(msg, p.doc);
         ws.send(msg);
 
         ws.on("message", onmessage);
+        ws.on("close", onclose);
     };
 
     // Normal client messages
@@ -155,16 +166,21 @@ function connection(ws) {
         ws.send(msg);
     }
 
+    // Socket closed
+    function onclose() {
+        delete docd.onchange[id];
+    }
+
     // Called when this client has changed the data
     function pushChange(field, value) {
-        var msg = null;
+        var msg = null, prev;
         if (typeof field !== "undefined") {
-            var prev = docd.data.pub[field];
-            docd.data.pub[field] = value;
-
             // Change to a given field
             if (field === "data") {
-                // Diffable change
+                prev = docd.data.data;
+                docd.data.data = value;
+
+                // Diffable change to actual data
                 var diff = dmp.diff_main(prev, value);
                 dmp.diff_cleanupEfficiency(diff);
                 var patches = dmp.patch_make(prev, diff);
@@ -178,11 +194,14 @@ function connection(ws) {
                 pbuf.copy(msg, p.diff);
 
             } else {
+                prev = docd.data.meta[field];
+                docd.data.meta[field] = value;
+
                 // Non-diffable, JSONable change
                 var fieldBuf, out;
                 fieldBuf = Buffer.from(field);
                 if (typeof value === "undefined") {
-                    delete docd.data.pub[field];
+                    delete docd.data.meta[field];
                     out = new Buffer(0);
                 } else {
                     out = Buffer.from(JSON.stringify(value));
@@ -198,7 +217,7 @@ function connection(ws) {
         } else {
             // Force a full push
             var p = prot.full;
-            var out = Buffer.from(JSON.stringify(docd.data.pub));
+            var out = Buffer.from(docd.data.data);
             msg = new Buffer(p.length + out.length);
             msg.writeUInt32LE(prot.ids.full, 0);
             out.copy(msg, p.doc);
@@ -251,7 +270,7 @@ function connection(ws) {
         try {
             console.error("'" + msg.toString("utf8", p.diff) + "'");
             var patches = JSON.parse(msg.toString("utf8", p.diff));
-            var result = dmp.patch_apply(patches, docd.data.pub.data)[0];
+            var result = dmp.patch_apply(patches, docd.data.data)[0];
             // We recalculate the patch instead of transmitting theirs elsewhere
             pushChange("data", result);
         } catch (ex) {

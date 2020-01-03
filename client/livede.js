@@ -82,6 +82,10 @@
                     ide.setOption("readOnly", false);
                 break;
 
+            case prot.ids.meta:
+                meta(msg);
+                break;
+
             case prot.ids.full:
                 full(msg);
                 break;
@@ -99,17 +103,29 @@
         clientID = msg.getUint32(p.id, true);
     }
 
-    // Received a full update
+    // Received a full metadata update
+    function meta(msg) {
+        var p = prot.meta;
+        var newDoc = JSON.parse(decodeText(msg.buffer.slice(p.meta)));
+        if (doc) {
+            newDoc.data = doc.data;
+        } else {
+            newDoc.data = "";
+        }
+        doc = newDoc;
+    }
+
+    // Received a full content update
     function full(msg) {
         var p = prot.full;
-        var newDoc = JSON.parse(decodeText(msg.buffer.slice(p.doc)));
+        var newData = decodeText(msg.buffer.slice(p.doc));
         if (doc && ide) {
             // It's a full update to the existing doc.
             // ...
 
         } else {
             // Totally fresh document
-            doc = newDoc;
+            doc.data = newData;
             var mode = doc.language || "javascript";
             if (!(mode in modeStates)) {
                 // This mode is totally unloaded, so load it
@@ -205,7 +221,7 @@
                     swapped = true;
                 }
                 from = applyPatchSelection(from, patch, false);
-                to = applyPatchSelection(to, patch, true);
+                to = applyPatchSelection(to, patch, from !== to);
                 if (swapped) {
                     selection.anchor.exact = to;
                     selection.head.exact = from;
