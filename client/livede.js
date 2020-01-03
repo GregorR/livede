@@ -468,6 +468,8 @@
             return;
         }
 
+        ide.focus();
+
         // Show the output window
         ideUI.style.right = "50%";
         outputUI.style.display = "inline-block";
@@ -499,6 +501,9 @@
     function outputClose() {
         outputUI.style.display = "none";
         ideUI.style.right = "0";
+
+        if (ide)
+            ide.focus();
     }
 
     // Request a login password
