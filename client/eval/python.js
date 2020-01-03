@@ -19,7 +19,7 @@
 (function() {
     // Set pyodide's path
     var base = document.location.pathname;
-    base = base.slice(base.lastIndexOf("/") + 1);
+    base = base.slice(0, base.lastIndexOf("/") + 1);
     languagePluginUrl = base + "pyodide/";
     var currentPrint = null;
 
