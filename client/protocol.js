@@ -3,11 +3,12 @@
         version: 1,
 
         ids: {
-            handshake: 0x00,
+            handshake: 0x00,    // Initial connection handshake, C->S
 
-            full: 0x10, // Full state of the document
-            meta: 0x11, // Change to a metadata field
-            diff: 0x12, // Change to the document text
+            full: 0x10,         // Full state of the document, S->C
+            meta: 0x11,         // Change to a metadata field
+            diff: 0x12,         // Change to the document text, S->C
+            cdiff: 0x13,        // Change to the document text, C->S (no hash)
         },
 
         handshake: {
@@ -29,9 +30,14 @@
         },
 
         diff: {
-            sha512: 4,
+            hash: 4,
             diff: 8,
             length: 8
+        },
+
+        cdiff: {
+            diff: 4,
+            length: 4
         }
     };
 

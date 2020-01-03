@@ -5,6 +5,8 @@ const https = require("https");
 const ws = require("ws");
 const prot = require("../client/protocol.js");
 const sjcl = require("../client/sjcl.js");
+const sch = sjcl.codec.hex;
+const hash = sjcl.hash.sha256;
 const DiffPatch = require("../client/diff_match_patch.js");
 const dmp = new DiffPatch();
 
@@ -59,33 +61,41 @@ function connection(ws) {
 
         // First message must be a handshake
         var p = prot.handshake;
-        if (msg.length < p.length)
+        if (msg.length < p.length) {
+            console.error("A");
             return ws.close();
+        }
 
         var cmd = msg.readUInt32LE(0);
-        if (cmd !== prot.ids.handshake)
+        if (cmd !== prot.ids.handshake) {
+            console.error("B");
             return ws.close();
+        }
 
         var vers = msg.readUInt32LE(p.version);
-        if (vers !== prot.version)
+        if (vers !== prot.version) {
+            console.error("C");
             return ws.close();
+        }
 
         doc = "data/" + msg.toString("utf8", p.doc).replace(/[^A-Za-z0-9]/g, "_") + ".json";
-        if (!exists(doc))
+        if (!exists(doc)) {
+            console.error("D");
             return ws.close();
+        }
 
         // Set up the document
         if (!(doc in docs))
             docs[doc] = {onchange: {}, saveTimer: null, data: JSON.parse(fs.readFileSync(doc, "utf8"))};
         docd = docs[doc];
 
-        if (!docd.data.data)
-            docd.data.data = "";
+        if (!docd.data.pub)
+            docd.data.pub = {data: ""};
         if (docd.data.password && Object.keys(docd.onchange).length === 0) {
             // Raw password, replace it with a hashed one
             var salt = docd.data.salt = ~~(Math.random() * 1000000000);
             var inp = salt + docd.data.password;
-            docd.data.passwordHash = sjcl.hash.sha512.hash(salt + docd.data.password);
+            docd.data.passwordHash = sch.fromBits(hash.hash(salt + docd.data.password));
             delete docd.data.password;
             pushChange();
         }
@@ -98,10 +108,10 @@ function connection(ws) {
 
         // Now send back the current state of the document
         p = prot.full;
-        var state = Buffer.from(JSON.stringify(docd.data));
+        var state = Buffer.from(JSON.stringify(docd.data.pub));
         msg = Buffer.alloc(p.length + state.length);
         msg.writeUInt32LE(prot.ids.full, 0);
-        state.copy(buf, p.doc);
+        state.copy(msg, p.doc);
         ws.send(msg);
 
         ws.on("message", onmessage);
@@ -115,6 +125,13 @@ function connection(ws) {
         var cmd = msg.readUInt32LE(0);
 
         switch (cmd) {
+            case prot.ids.cdiff:
+                if (msg.length < prot.cdiff.length)
+                    return ws.close();
+                // FIXME: SECURITY!
+                applyPatch(msg);
+                break;
+
             default:
                 return ws.close();
         }
@@ -129,27 +146,30 @@ function connection(ws) {
     function pushChange(field, value) {
         var msg = null;
         if (typeof field !== "undefined") {
-            var prev = docd.data[field];
-            docd.data[field] = value;
+            var prev = docd.data.pub[field];
+            docd.data.pub[field] = value;
 
             // Change to a given field
             if (field === "data") {
                 // Diffable change
-                var diff = dmp.diff_cleanupEfficiency(dmp.diff_main(prev, value));
-                diff = Buffer.from(JSON.stringify(diff));
-                var sha512 = sjcl.hash.sha512.hash(value);
+                var diff = dmp.diff_main(prev, value);
+                dmp.diff_cleanupEfficiency(diff);
+                var patches = dmp.patch_make(prev, diff);
+                console.error(patches);
+                var pbuf = Buffer.from(JSON.stringify(patches));
+                var hashed = hash.hash(value)[0];
                 var p = prot.diff;
-                msg = new Buffer(p.length + diff.length);
+                msg = new Buffer(p.length + pbuf.length);
                 msg.writeUInt32LE(prot.ids.diff, 0);
-                msg.writeUInt32LE(sha512, p.sha512);
-                diff.copy(msg, p.diff);
+                msg.writeInt32LE(hashed, p.hash);
+                pbuf.copy(msg, p.diff);
 
             } else {
                 // Non-diffable, JSONable change
                 var fieldBuf, out;
                 fieldBuf = Buffer.from(field);
                 if (typeof value === "undefined") {
-                    delete docd.data[field];
+                    delete docd.data.pub[field];
                     out = new Buffer(0);
                 } else {
                     out = Buffer.from(JSON.stringify(value));
@@ -165,7 +185,7 @@ function connection(ws) {
         } else {
             // Force a full push
             var p = prot.full;
-            var out = Buffer.from(JSON.stringify(docd.data));
+            var out = Buffer.from(JSON.stringify(docd.data.pub));
             msg = new Buffer(p.length + out.length);
             msg.writeUInt32LE(prot.ids.full, 0);
             out.copy(msg, p.doc);
@@ -181,12 +201,28 @@ function connection(ws) {
         // Save it after a bit
         if (docd.saveTimer)
             clearTimeout(docd.saveTimer);
-        docd.saveTimer = setTimeout(30000, save);
+        docd.saveTimer = setTimeout(save, 30000);
     }
 
     // Save the current data
     function save() {
         fs.writeFileSync(doc, JSON.stringify(docd.data), "utf8");
         docd.saveTimer = null;
+    }
+
+    // Apply a patch from this client
+    function applyPatch(msg) {
+        var p = prot.cdiff;
+
+        // Don't trust anything
+        try {
+            console.error("'" + msg.toString("utf8", p.diff) + "'");
+            var patches = JSON.parse(msg.toString("utf8", p.diff));
+            var result = dmp.patch_apply(patches, docd.data.pub.data)[0];
+            // We recalculate the patch instead of transmitting theirs elsewhere
+            pushChange("data", result);
+        } catch (ex) {
+            console.error(ex); // Eventually ws.close
+        }
     }
 }
