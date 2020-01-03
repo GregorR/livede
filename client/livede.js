@@ -233,7 +233,7 @@
     function diff(msg) {
         var p = prot.diff;
         docHash = msg.getInt32(p.hash, true);
-        var patches = JSON.parse(decodeText(msg.buffer.slice(p.diff)));
+        var patches = dmp.patch_fromText(decodeText(msg.buffer.slice(p.diff)));
         applyPatches(patches);
     }
 
@@ -465,7 +465,7 @@
         var diff = dmp.diff_main(from, to);
         dmp.diff_cleanupEfficiency(diff);
         var patches = dmp.patch_make(from, diff);
-        var pbuf = encodeText(JSON.stringify(patches));
+        var pbuf = encodeText(dmp.patch_toText(patches));
 
         // And push it to the server
         var p = prot.cdiff;

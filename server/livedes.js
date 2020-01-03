@@ -217,7 +217,7 @@ function connection(ws) {
                 var diff = dmp.diff_main(prev, value);
                 dmp.diff_cleanupEfficiency(diff);
                 var patches = dmp.patch_make(prev, diff);
-                var pbuf = Buffer.from(JSON.stringify(patches));
+                var pbuf = Buffer.from(dmp.patch_toText(patches));
                 var hashed = hash.hash(value)[0];
                 var p = prot.diff;
                 msg = new Buffer(p.length + pbuf.length);
@@ -354,7 +354,7 @@ function connection(ws) {
 
         // Don't trust anything
         try {
-            var patches = JSON.parse(msg.toString("utf8", p.diff));
+            var patches = dmp.patch_fromText(msg.toString("utf8", p.diff));
             var result = dmp.patch_apply(patches, docd.data.data[forkNo])[0];
             // We recalculate the patch instead of transmitting theirs elsewhere
             pushChange("data", result);
