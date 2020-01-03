@@ -80,25 +80,21 @@ function connection(ws) {
         // First message must be a handshake
         var p = prot.handshake;
         if (msg.length < p.length) {
-            console.error("A");
             return ws.close();
         }
 
         var cmd = msg.readUInt32LE(0);
         if (cmd !== prot.ids.handshake) {
-            console.error("B");
             return ws.close();
         }
 
         var vers = msg.readUInt32LE(p.version);
         if (vers !== prot.version) {
-            console.error("C");
             return ws.close();
         }
 
         doc = "data/" + msg.toString("utf8", p.doc).replace(/[^A-Za-z0-9]/g, "_") + ".json";
         if (!exists(doc)) {
-            console.error("D");
             return ws.close();
         }
 
@@ -296,7 +292,6 @@ function connection(ws) {
 
         // Don't trust anything
         try {
-            console.error("'" + msg.toString("utf8", p.diff) + "'");
             var patches = JSON.parse(msg.toString("utf8", p.diff));
             var result = dmp.patch_apply(patches, docd.data.data)[0];
             // We recalculate the patch instead of transmitting theirs elsewhere
