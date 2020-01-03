@@ -112,6 +112,12 @@
                 logInFormUI.style.display = "none";
                 loggedInUI.style.display = "inline";
                 loggedIn = true;
+                ideUI.style.fontSize = "3em";
+                if (ide)
+                    ide.refresh();
+                outputUI.style.fontSize = "3em";
+                if (outputCM)
+                    outputCM.refresh();
                 updateLockUI();
                 updateReadOnly();
                 break;
@@ -431,9 +437,6 @@
                 cm.replaceSelection("    ");
             }
         });
-
-        ideUI.style.fontSize = "3em";
-        outputUI.style.fontSize = "3em";
 
         ide.setValue(doc.data);
 
