@@ -114,7 +114,7 @@
                 loggedIn = true;
                 if (doc && ide)
                     ide.setOption("readOnly", false);
-                updateUI();
+                updateLockUI();
                 break;
 
             case prot.ids.meta:
@@ -474,7 +474,7 @@
         hideUI.onclick = hideMenu;
         secondHeaderUI.onclick = showMenu;
         outputCloseUI.onclick = outputClose;
-        updateUI();
+        updateLockUI();
     }
 
     // Update the UI when it's changed in some way
@@ -485,6 +485,24 @@
         }, 100);
     }
     window.addEventListener("resize", updateUI);
+
+    // Update the lock button to be consistent with the current state
+    function updateLockUI() {
+        var h = '<i class="fas fa-';
+        if (local)
+            h += 'backward';
+        else
+            h += 'lock';
+        h += '"></i>&nbsp;&nbsp;';
+        if (local)
+            h += "Revert (<u>l</u>)";
+        else if (loggedIn)
+            h += "Un<u>l</u>ock";
+        else
+            h += "<u>L</u>ocal";
+        lockUI.innerHTML = h;
+        updateUI();
+    }
 
     // Run the code
     function run() {
@@ -538,7 +556,6 @@
         if (local) {
             // We're already in local editing mode, so swap back to global mode
             local = false;
-            lockUI.innerHTML = "Un<u>l</u>ock";
 
             // Revert by patching so we can preserve selections
             var cur = ide.getValue();
@@ -553,11 +570,11 @@
         } else {
             // We're not in local editing mode, so switch into it
             local = true;
-            lockUI.innerHTML = "<u>L</u>ock";
             ide.setOption("readOnly", false);
 
         }
 
+        updateLockUI();
         ide.focus();
     }
 

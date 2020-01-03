@@ -2,14 +2,17 @@
 <html>
     <head>
         <title>LiveDE</title>
+
+        <script type="text/javascript" src="protocol.js"></script>
+
+        <script type="text/javascript" src="sjcl.js"></script>
+        <script type="text/javascript" src="diff_match_patch.js"></script>
+
         <script type="text/javascript" src="codemirror/lib/codemirror.js"></script>
         <link rel="stylesheet" href="codemirror/lib/codemirror.css" />
         <link rel="stylesheet" href="codemirror/theme/vibrant-ink.css" />
-        <script type="text/javascript" src="codemirror/mode/python/python.js"></script>
 
-        <script type="text/javascript" src="protocol.js"></script>
-        <script type="text/javascript" src="sjcl.js"></script>
-        <script type="text/javascript" src="diff_match_patch.js"></script>
+        <link rel="stylesheet" href="fontawesome/css/all.min.css" />
 
         <style type="text/css">
             #master, #loggedin {
@@ -48,14 +51,18 @@
             .CodeMirror {
                 height: auto;
             }
+
+            #header button {
+                font-size: 1.5em;
+            }
         </style>
     </head>
     <body style="margin: 0">
         <div id="headers">
             <div id="header">
                 <span>
-                    <button id="run" accesskey="r"><u>R</u>un</button>
-                    <button id="lock" accesskey="l">Un<u>l</u>ock</button>
+                    <button id="run" accesskey="r"><i class="fas fa-play"></i>&nbsp;&nbsp;<u>R</u>un</button>
+                    <button id="lock" accesskey="l"></button>
                 </span>
                 <span id="master">
                     <form id="loginForm" style="display: inline">
@@ -64,7 +71,7 @@
                     </form>
                 </span>
                 <span id="loggedin">
-                    <button id="hide" accesskey="h"><u>H</u>ide</button>
+                    <button id="hide" accesskey="h"><i class="fas fa-eye-slash"></i>&nbsp;&nbsp;<u>H</u>ide</button>
                 </span>
             </div>
             <div id="secondheader"></div>
@@ -73,7 +80,7 @@
         <div id="ide">Connecting...</div>
         <div id="output">
             <div style="text-align: right">
-                <button id="outputclose" accesskey="x"><u>X</u></button>
+                <button id="outputclose" accesskey="x" style="position: relative; right: 0; top: 0;"><i class="fas fa-times"></i></button>
             </div>
         </div>
         <script type="text/javascript" src="livede.js"></script>
