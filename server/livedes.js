@@ -101,10 +101,18 @@ function connection(ws) {
         }
 
         // Get a connection ID
-        id = ~~(Math.random() * 1000000000);
+        id = ~~(Math.random() * 2000000000);
         while (id in docd.onchange)
-            id = ~~(Math.random() * 1000000000);
+            id = ~~(Math.random() * 2000000000);
         docd.onchange[id] = onchange;
+
+        // Send the login salt and connection ID
+        p = prot.welcome;
+        msg = Buffer.alloc(p.length);
+        msg.writeUInt32LE(prot.ids.welcome, 0);
+        msg.writeUInt32LE(docd.data.salt || 0, p.salt);
+        msg.writeUInt32LE(id, p.id);
+        ws.send(msg);
 
         // Now send back the current state of the document
         p = prot.full;
@@ -125,10 +133,15 @@ function connection(ws) {
         var cmd = msg.readUInt32LE(0);
 
         switch (cmd) {
-            case prot.ids.cdiff:
-                if (msg.length < prot.cdiff.length)
+            case prot.ids.login:
+                if (msg.length < prot.login.length)
                     return ws.close();
-                // FIXME: SECURITY!
+                loginAttempt(msg);
+                break;
+
+            case prot.ids.cdiff:
+                if (msg.length < prot.cdiff.length || !master)
+                    return ws.close();
                 applyPatch(msg);
                 break;
 
@@ -208,6 +221,26 @@ function connection(ws) {
     function save() {
         fs.writeFileSync(doc, JSON.stringify(docd.data), "utf8");
         docd.saveTimer = null;
+    }
+
+    // An attempted (master) login
+    function loginAttempt(msg) {
+        if (!docd.data.passwordHash) {
+            // There is no correct password!
+            return ws.close();
+        }
+
+        var p = prot.login;
+        var givenPassword = msg.toString("utf8", p.password);
+        var correctPassword = sch.fromBits(hash.hash(id + docd.data.passwordHash));
+        if (givenPassword !== correctPassword)
+            return ws.close();
+
+        // Correct password, they're a master
+        master = true;
+        var msg = new Buffer(p.length);
+        msg.writeUInt32LE(prot.ids.loggedin, 0);
+        ws.send(msg);
     }
 
     // Apply a patch from this client
