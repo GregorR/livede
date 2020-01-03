@@ -73,6 +73,7 @@ function startWS() {
 function connection(ws) {
     var id, doc, docd;
     var master = false;
+    var forkNo = 0;
 
     return function(msg) {
         msg = Buffer.from(msg);
@@ -100,13 +101,13 @@ function connection(ws) {
 
         // Set up the document
         if (!(doc in docs))
-            docs[doc] = {onchange: {}, saveTimer: null, data: JSON.parse(fs.readFileSync(doc, "utf8"))};
+            docs[doc] = {onchange: {}, forkNos: {}, saveTimer: null, data: JSON.parse(fs.readFileSync(doc, "utf8"))};
         docd = docs[doc];
 
         if (!docd.data.meta)
-            docd.data.meta = {};
+            docd.data.meta = {locked: true};
         if (!docd.data.data)
-            docd.data.data = "";
+            docd.data.data = [""];
         if (docd.data.password && Object.keys(docd.onchange).length === 0) {
             // Raw password, replace it with a hashed one
             var salt = docd.data.salt = ~~(Math.random() * 1000000000);
@@ -121,6 +122,7 @@ function connection(ws) {
         while (id in docd.onchange)
             id = ~~(Math.random() * 2000000000);
         docd.onchange[id] = onchange;
+        docd.forkNos[id] = 0;
 
         // Send the login salt and connection ID
         p = prot.welcome;
@@ -140,7 +142,7 @@ function connection(ws) {
 
         // Finally, send the document text
         p = prot.full;
-        var data = Buffer.from(docd.data.data);
+        var data = Buffer.from(docd.data.data[0]);
         msg = Buffer.alloc(p.length + data.length);
         msg.writeUInt32LE(prot.ids.full, 0);
         data.copy(msg, p.doc);
@@ -164,9 +166,17 @@ function connection(ws) {
                 loginAttempt(msg);
                 break;
 
-            case prot.ids.cdiff:
-                if (msg.length < prot.cdiff.length || !master)
+            case prot.ids.metadiff:
+                if (msg.length < prot.metadiff.length || !master)
                     return ws.close();
+                metaDiff(msg);
+                break;
+
+            case prot.ids.cdiff:
+                if (msg.length < prot.cdiff.length)
+                    return ws.close();
+                if (!master && !maybeFork())
+                    return;
                 applyPatch(msg);
                 break;
 
@@ -182,21 +192,26 @@ function connection(ws) {
     // Triggered when another client has changed the data
     function onchange(msg) {
         ws.send(msg);
+        forkNo = docd.forkNos[id];
     }
 
     // Socket closed
     function onclose() {
         delete docd.onchange[id];
+        delete docd.forkNos[id];
+        if (Object.keys(docd.onchange).length === 0)
+            delete docs[doc];
     }
 
     // Called when this client has changed the data
     function pushChange(field, value) {
         var msg = null, prev;
+        var sendToAll = false;
         if (typeof field !== "undefined") {
             // Change to a given field
             if (field === "data") {
-                prev = docd.data.data;
-                docd.data.data = value;
+                prev = docd.data.data[forkNo];
+                docd.data.data[forkNo] = value;
 
                 // Diffable change to actual data
                 var diff = dmp.diff_main(prev, value);
@@ -220,6 +235,7 @@ function connection(ws) {
             } else {
                 prev = docd.data.meta[field];
                 docd.data.meta[field] = value;
+                sendToAll = true;
 
                 // Non-diffable, JSONable change
                 var fieldBuf, out;
@@ -230,18 +246,18 @@ function connection(ws) {
                 } else {
                     out = Buffer.from(JSON.stringify(value));
                 }
-                var p = prot.meta;
+                var p = prot.metadiff;
                 msg = new Buffer(p.length + fieldBuf.length + out.length);
-                msg.writeUInt32LE(prot.ids.meta, 0);
+                msg.writeUInt32LE(prot.ids.metadiff, 0);
                 msg.writeUInt32LE(fieldBuf.length, p.fieldLen);
-                field.copy(msg, p.field);
+                fieldBuf.copy(msg, p.field);
                 out.copy(msg, p.value + fieldBuf.length);
             }
 
         } else {
             // Force a full push
             var p = prot.full;
-            var out = Buffer.from(docd.data.data);
+            var out = Buffer.from(docd.data.data[forkNo]);
             msg = new Buffer(p.length + out.length);
             msg.writeUInt32LE(prot.ids.full, 0);
             out.copy(msg, p.doc);
@@ -250,7 +266,8 @@ function connection(ws) {
 
         // Push the change to other clients
         for (var oid in docd.onchange) {
-            if (+oid !== id)
+            if (+oid !== id &&
+                (sendToAll || docd.forkNos[oid] === forkNo))
                 docd.onchange[oid](msg);
         }
 
@@ -286,6 +303,51 @@ function connection(ws) {
         ws.send(msg);
     }
 
+    // Fork if forking is allowed and we're on fork 0
+    function maybeFork() {
+        if (docd.data.meta.locked)
+            return false;
+
+        if (forkNo === 0) {
+            // Fork to a new version
+            forkNo = docd.data.data.length;
+            docd.data.data.push(docd.data.data[0]);
+        }
+
+        return true;
+    }
+
+    // A metadata diff from a client
+    function metaDiff(msg) {
+        var p = prot.metadiff;
+        var fieldLen = msg.readUInt32LE(p.fieldLen);
+        if (msg.length < p.length + fieldLen)
+            return ws.close();
+
+        var field = msg.toString("utf8", p.field, p.field + fieldLen);
+        var value;
+
+        // Don't trust the input
+        try {
+            value = JSON.parse(msg.toString("utf8", p.value + fieldLen));
+        } catch (ex) {
+            return ws.close();
+        }
+
+        // Perform the update
+        pushChange(field, value);
+
+        // Perform special operations if needed
+        if (field === "locked" && value) {
+            // We just locked, so everyone has to be on fork 0 now
+            docd.data.data = [docd.data.data[0]];
+            for (var oid in docd.forkNos)
+                docd.forkNos[oid] = 0;
+            forkNo = 0;
+            pushChange();
+        }
+    }
+
     // Apply a patch from this client
     function applyPatch(msg) {
         var p = prot.cdiff;
@@ -293,7 +355,7 @@ function connection(ws) {
         // Don't trust anything
         try {
             var patches = JSON.parse(msg.toString("utf8", p.diff));
-            var result = dmp.patch_apply(patches, docd.data.data)[0];
+            var result = dmp.patch_apply(patches, docd.data.data[forkNo])[0];
             // We recalculate the patch instead of transmitting theirs elsewhere
             pushChange("data", result);
         } catch (ex) {
@@ -304,7 +366,7 @@ function connection(ws) {
     // Request for the full document
     function reqFull() {
         var p = prot.full;
-        var data = Buffer.from(docd.data.data);
+        var data = Buffer.from(docd.data.data[forkNo]);
         var msg = Buffer.alloc(p.length + data.length);
         msg.writeUInt32LE(prot.ids.full, 0);
         data.copy(msg, p.doc);

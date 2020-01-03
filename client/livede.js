@@ -112,9 +112,8 @@
                 logInFormUI.style.display = "none";
                 loggedInUI.style.display = "inline";
                 loggedIn = true;
-                if (doc && ide)
-                    ide.setOption("readOnly", false);
                 updateLockUI();
+                updateReadOnly();
                 break;
 
             case prot.ids.meta:
@@ -127,6 +126,10 @@
 
             case prot.ids.diff:
                 diff(msg);
+                break;
+
+            case prot.ids.metadiff:
+                metaDiff(msg);
                 break;
 
             case prot.ids.hash:
@@ -152,6 +155,21 @@
             newDoc.data = "";
         }
         doc = newDoc;
+        updateLockUI();
+    }
+
+    // Received a partial metadata update
+    function metaDiff(msg) {
+        var p = prot.metadiff;
+        var fieldLen = msg.getUint32(p.fieldLen, true);
+        var field = decodeText(msg.buffer.slice(p.field, p.field + fieldLen));
+        var value = JSON.parse(decodeText(msg.buffer.slice(p.value + fieldLen)));
+        doc[field] = value;
+
+        if (field === "locked") {
+            updateLockUI();
+            updateReadOnly();
+        }
     }
 
     // Received a full content update
@@ -403,8 +421,10 @@
             viewportMargin: Infinity,
 
             mode: mode,
-            readOnly: !loggedIn
+            readOnly: true
         });
+
+        updateReadOnly();
 
         ide.setOption("extraKeys", {
             Tab: function(cm) {
@@ -500,19 +520,58 @@
     // Update the lock button to be consistent with the current state
     function updateLockUI() {
         var h = '<i class="fas fa-';
-        if (local)
+        lockUI.disabled = false;
+        if (local) {
             h += 'backward';
-        else
-            h += 'lock';
+        } else if (loggedIn) {
+            if (doc.locked)
+                h += "lock";
+            else
+                h += "unlock";
+        } else {
+            if (doc.locked)
+                h += "laptop-code"
+            else
+                h += "unlock";
+        }
         h += '"></i>&nbsp;&nbsp;';
-        if (local)
+        if (local) {
             h += "Revert (<u>l</u>)";
-        else if (loggedIn)
-            h += "Un<u>l</u>ock";
-        else
-            h += "<u>L</u>ocal";
+        } else if (loggedIn) {
+            if (doc.locked)
+                h += "Un<u>l</u>ock";
+            else
+                h += "<u>L</u>ock";
+        } else {
+            if (doc.locked) {
+                h += "<u>L</u>ocal";
+            } else {
+                h += "Unlocked";
+                lockUI.disabled = true;
+            }
+        }
         lockUI.innerHTML = h;
         updateUI();
+    }
+
+    /* The read-only state of the buffer is quite complicated, as it depends on
+     * a number of different ways that it may be writable */
+    function updateReadOnly() {
+        if (!doc || !ide) return;
+
+        var readOnly = true;
+
+        if (loggedIn) {
+            // We can't write if it's unlocked to students
+            readOnly = !doc.locked;
+
+        } else {
+            // We can write if it's unlocked, or we're doing local changes
+            readOnly = !(!doc.locked || local);
+
+        }
+
+        ide.setOption("readOnly", readOnly);
     }
 
     // Run the code
@@ -560,7 +619,7 @@
             ide.focus();
     }
 
-    // Lock or unlock for local edits
+    // Lock or unlock the document in all the various ways it can be locked or unlocked
     function lockUnlock() {
         if (!ide) return;
 
@@ -575,17 +634,30 @@
             doc.data = cur;
             applyPatches(patches);
 
-            if (!loggedIn)
-                ide.setOption("readOnly", true);
+        } else if (loggedIn) {
+            // Prepare a lock/unlock message
+            var p = prot.metadiff;
+            var fieldBuf = encodeText("locked");
+            var valueBuf = encodeText(JSON.stringify(!doc.locked));
+            var msg = new DataView(new ArrayBuffer(p.length + fieldBuf.length + valueBuf.length));
+            msg.setUint32(0, prot.ids.metadiff, true);
+            msg.setUint32(p.fieldLen, fieldBuf.length, true);
+            new Uint8Array(msg.buffer).set(fieldBuf, p.field);
+            new Uint8Array(msg.buffer).set(valueBuf, p.value + fieldBuf.length);
+            ws.send(msg);
+
+            // And handle it ourselves to do the transition
+            metaDiff(msg);
 
         } else {
-            // We're not in local editing mode, so switch into it
+            /* We're not in local editing mode, and not a master, so switch
+             * into local editing mode */
             local = true;
-            ide.setOption("readOnly", false);
 
         }
 
         updateLockUI();
+        updateReadOnly();
         ide.focus();
     }
 
