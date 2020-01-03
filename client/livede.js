@@ -40,6 +40,7 @@
     var secondHeaderUI = dge("secondheader");
     var ideUI = dge("ide");
     var outputUI = dge("output");
+    var outputCloseUI = dge("outputclose");
     var ide = null;
     var outputCM = null;
 
@@ -376,6 +377,12 @@
             readOnly: !loggedIn
         });
 
+        ide.setOption("extraKeys", {
+            Tab: function(cm) {
+                cm.replaceSelection("    ");
+            }
+        });
+
         ideUI.style.fontSize = "3em";
         outputUI.style.fontSize = "3em";
 
@@ -439,6 +446,7 @@
         logInFormUI.onsubmit = logIn;
         hideUI.onclick = hideMenu;
         secondHeaderUI.onclick = showMenu;
+        outputCloseUI.onclick = outputClose;
         updateUI();
     }
 
@@ -482,6 +490,12 @@
             // FIXME: This is a grotesque way to do this
             outputCM.setValue(outputCM.getValue() + str);
         });
+    }
+
+    // Close the output
+    function outputClose() {
+        outputUI.style.display = "none";
+        ideUI.style.right = "0";
     }
 
     // Request a login password

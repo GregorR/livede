@@ -21,7 +21,7 @@ LiveDEEval.javascript = function(code, print) {
     var origLog = console.log;
     var func = null;
     console.log = function(val) {
-        if (typeof val === "string") {
+        if (typeof val !== "object") {
             print(val + "\n");
         } else {
             try {
