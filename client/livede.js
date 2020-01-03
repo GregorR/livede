@@ -31,11 +31,11 @@
     var headersUI = dge("headers");
     var headerUI = dge("header");
     var runUI = dge("run");
+    var lockUI = dge("lock");
     var masterUI = dge("master");
     var logInFormUI = dge("loginForm");
     var logInPasswordUI = dge("loginPassword");
     var loggedInUI = dge("loggedin");
-    var lockUI = dge("lock");
     var hideUI = dge("hide");
     var secondHeaderUI = dge("secondheader");
     var ideUI = dge("ide");
@@ -45,10 +45,18 @@
     var outputCM = null;
 
     // Local state
+    // Which modes (languages) have we loaded?
     var modeStates = {};
+    // The current canonical state of the document
     var doc = {};
+    // And its hash
     var docHash = null;
+    // True if we're in local-copy mode
+    var local = false;
+    /* If we're editing locally while other edits are also coming in, we wait a
+     * second before checking for hash correctness */
     var checkHashTimeout = null;
+    // Used for master login
     var salt = null, clientID = null;
     var loggedIn = false;
 
@@ -151,11 +159,18 @@
         var p = prot.full;
         var newData = decodeText(msg.buffer.slice(p.doc));
         if (doc && ide) {
-            /* It's a full update to the existing doc. Apply it by patches so
-             * we preserve our selection. */
-            var diff = dmp.diff_main(doc.data, newData);
-            var patches = dmp.patch_make(doc.data, diff);
-            applyPatches(patches);
+            // It's a full update to the existing doc.
+            if (local) {
+                // Just take it, we're not watching anyway
+                doc.data = newData;
+
+            } else {
+                // Apply it by patches so we preserve our selection.
+                var diff = dmp.diff_main(doc.data, newData);
+                var patches = dmp.patch_make(doc.data, diff);
+                applyPatches(patches);
+
+            }
 
         } else {
             // Totally fresh document
@@ -177,6 +192,9 @@
             }
 
         }
+
+        // Calculate the hash ourselves
+        docHash = hash.hash(doc.data)[0];
     }
 
     // Received a diff
@@ -199,8 +217,8 @@
     // Apply patches to the whole document
     function applyPatches(patches) {
         var from = doc.data;
-        var fromLive = ide ? ide.getValue() : from;
-        var selections = ide ? ide.listSelections() : [];
+        var fromLive = (ide && !local) ? ide.getValue() : from;
+        var selections = (ide && !local) ? ide.listSelections() : [];
         if (from !== fromLive) {
             // Conflict in our own data, apply patches to our canonical version and live version separately
             doc.data = applyPatchesPrime(from, [], patches);
@@ -214,7 +232,7 @@
 
         } else {
             doc.data = applyPatchesPrime(from, selections, patches);
-            if (ide) {
+            if (ide && !local) {
                 ide.setValue(doc.data);
                 ide.setSelections(selections);
             }
@@ -355,6 +373,8 @@
             return;
         }
 
+        console.error("Hash mismatch!");
+
         // Something is wrong!
         var p = prot.reqfull;
         var msg = new DataView(new ArrayBuffer(p.length));
@@ -396,6 +416,10 @@
     var localChangeTimeout = null;
     function localChange() {
         outputClose();
+        if (local) {
+            // Don't propagate our changes
+            return;
+        }
         if (!localChangeTimeout)
             localChangeTimeout = setTimeout(localChangePrime, 250);
     }
@@ -445,6 +469,7 @@
     // UI setup
     function setupUI() {
         runUI.onclick = run;
+        lockUI.onclick = lockUnlock;
         logInFormUI.onsubmit = logIn;
         hideUI.onclick = hideMenu;
         secondHeaderUI.onclick = showMenu;
@@ -504,6 +529,36 @@
 
         if (ide)
             ide.focus();
+    }
+
+    // Lock or unlock for local edits
+    function lockUnlock() {
+        if (!ide) return;
+
+        if (local) {
+            // We're already in local editing mode, so swap back to global mode
+            local = false;
+            lockUI.innerHTML = "Un<u>l</u>ock";
+
+            // Revert by patching so we can preserve selections
+            var cur = ide.getValue();
+            var diff = dmp.diff_main(cur, doc.data);
+            var patches = dmp.patch_make(cur, diff);
+            doc.data = cur;
+            applyPatches(patches);
+
+            if (!loggedIn)
+                ide.setOption("readOnly", true);
+
+        } else {
+            // We're not in local editing mode, so switch into it
+            local = true;
+            lockUI.innerHTML = "<u>L</u>ock";
+            ide.setOption("readOnly", false);
+
+        }
+
+        ide.focus();
     }
 
     // Request a login password
