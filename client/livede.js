@@ -25,7 +25,7 @@
     var dmp = new diff_match_patch();
     var sch = sjcl.codec.hex;
     var hash = sjcl.hash.sha256;
-    var evalable = {javascript: true};
+    var evalable = {javascript: true, python: true};
 
     // Our critical elements
     var headersUI = dge("headers");
