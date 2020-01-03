@@ -1,4 +1,9 @@
 *.swp
 node_modules
 package-lock.json
+
 server/data/
+
+client/codemirror/
+client/fontawesome/
+client/pyodide/
