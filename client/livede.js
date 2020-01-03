@@ -40,7 +40,7 @@
     var modeStates = {};
     var doc = {};
     var docHash = null;
-    var hashCheckTimeout = null;
+    var checkHashTimeout = null;
     var salt = null, clientID = null;
     var loggedIn = false;
 
@@ -111,6 +111,10 @@
             case prot.ids.diff:
                 diff(msg);
                 break;
+
+            case prot.ids.hash:
+                recvHash(msg);
+                break;
         }
     };
 
@@ -138,8 +142,11 @@
         var p = prot.full;
         var newData = decodeText(msg.buffer.slice(p.doc));
         if (doc && ide) {
-            // It's a full update to the existing doc.
-            // ...
+            /* It's a full update to the existing doc. Apply it by patches so
+             * we preserve our selection. */
+            var diff = dmp.diff_main(doc.data, newData);
+            var patches = dmp.patch_make(doc.data, diff);
+            applyPatches(patches);
 
         } else {
             // Totally fresh document
@@ -166,29 +173,51 @@
     // Received a diff
     function diff(msg) {
         var p = prot.diff;
-        var hash = msg.getInt32(p.hash, true);
+        docHash = msg.getInt32(p.hash, true);
         var patches = JSON.parse(decodeText(msg.buffer.slice(p.diff)));
+        applyPatches(patches);
+    }
 
-        // FIXME: Need to worry about selection and hash!
+    // Received only a hash
+    function recvHash(msg) {
+        var p = prot.hash;
+        docHash = msg.getInt32(p.hash, true);
+        if (checkHashTimeout)
+            clearTimeout(checkHashTimeout);
+        checkHashTimeout = setTimeout(checkHash, 1000);
+    }
+
+    // Apply patches to the whole document
+    function applyPatches(patches) {
         var from = doc.data;
         var fromLive = ide ? ide.getValue() : from;
         var selections = ide ? ide.listSelections() : [];
         if (from !== fromLive) {
             // Conflict in our own data, apply patches to our canonical version and live version separately
-            doc.data = applyPatches(from, [], patches);
-            ide.setValue(applyPatches(fromLive, selections, patches));
+            doc.data = applyPatchesPrime(from, [], patches);
+            ide.setValue(applyPatchesPrime(fromLive, selections, patches));
             ide.setSelections(selections);
+
+            // Can't check immediately with changes in-flight, so check after a second
+            if (checkHashTimeout)
+                clearTimeout(checkHashTimeout);
+            checkHashTimeout = setTimeout(checkHash, 1000);
+
         } else {
-            doc.data = applyPatches(from, selections, patches);
+            doc.data = applyPatchesPrime(from, selections, patches);
             if (ide) {
                 ide.setValue(doc.data);
                 ide.setSelections(selections);
             }
+
+            // Check immediately
+            if (!checkHashTimeout)
+                checkHash();
         }
     }
 
-    // Apply patches to data *and* selections
-    function applyPatches(data, selections, patches) {
+    // Apply patches to data and selections
+    function applyPatchesPrime(data, selections, patches) {
         // Modify our selections to exact locations instead of line + ch
         var lines = data.split("\n");
         var di = 0, si = 0, li, selection = selections[0];
@@ -304,6 +333,24 @@
         }
 
         return loc;
+    }
+
+    // Check that the hash matches, and request an update if it doesn't
+    function checkHash() {
+        if (checkHashTimeout)
+            checkHashTimeout = null;
+
+        var localHash = hash.hash(doc.data)[0];
+        if (localHash === docHash) {
+            // No problem
+            return;
+        }
+
+        // Something is wrong!
+        var p = prot.reqfull;
+        var msg = new DataView(new ArrayBuffer(p.length));
+        msg.setUint32(0, prot.ids.reqfull, true);
+        ws.send(msg);
     }
 
     // Load the IDE

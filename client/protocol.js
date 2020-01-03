@@ -31,6 +31,9 @@
             metadiff: 0x12,     // Change to a metadata field
             diff: 0x13,         // Change to the document text, S->C
             cdiff: 0x14,        // Change to the document text, C->S (no hash)
+            hash: 0x15,         // Just the updated hash, S->C
+
+            reqfull: 0x20,      // Hash mismatch, request full document
         },
 
         handshake: {
@@ -79,6 +82,15 @@
 
         cdiff: {
             diff: 4,
+            length: 4
+        },
+
+        hash: {
+            hash: 4,
+            length: 8
+        },
+
+        reqfull: {
             length: 4
         }
     };

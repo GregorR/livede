@@ -174,6 +174,10 @@ function connection(ws) {
                 applyPatch(msg);
                 break;
 
+            case prot.ids.reqfull:
+                reqFull();
+                break;
+
             default:
                 return ws.close();
         }
@@ -202,7 +206,6 @@ function connection(ws) {
                 var diff = dmp.diff_main(prev, value);
                 dmp.diff_cleanupEfficiency(diff);
                 var patches = dmp.patch_make(prev, diff);
-                console.error(patches);
                 var pbuf = Buffer.from(JSON.stringify(patches));
                 var hashed = hash.hash(value)[0];
                 var p = prot.diff;
@@ -210,6 +213,13 @@ function connection(ws) {
                 msg.writeUInt32LE(prot.ids.diff, 0);
                 msg.writeInt32LE(hashed, p.hash);
                 pbuf.copy(msg, p.diff);
+
+                // In addition, send just the hash to just this client
+                p = prot.hash;
+                var hashMsg = new Buffer(p.length);
+                hashMsg.writeUInt32LE(prot.ids.hash, 0);
+                hashMsg.writeInt32LE(hashed, p.hash);
+                ws.send(hashMsg);
 
             } else {
                 prev = docd.data.meta[field];
@@ -294,5 +304,15 @@ function connection(ws) {
         } catch (ex) {
             console.error(ex); // Eventually ws.close
         }
+    }
+
+    // Request for the full document
+    function reqFull() {
+        var p = prot.full;
+        var data = Buffer.from(docd.data.data);
+        var msg = Buffer.alloc(p.length + data.length);
+        msg.writeUInt32LE(prot.ids.full, 0);
+        data.copy(msg, p.doc);
+        ws.send(msg);
     }
 }
