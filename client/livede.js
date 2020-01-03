@@ -600,6 +600,12 @@
 
     // Hide the menu
     function hideMenu() {
+        if (headerUI.style.display === "none") {
+            // Never mind, SHOW the menu!
+            showMenu();
+            return;
+        }
+
         // Make a URL to hide it with
         var url = docURL.host + docURL.pathname;
         if (srch.has("doc"))
