@@ -4,6 +4,7 @@
         <title>LiveDE</title>
         <script type="text/javascript" src="codemirror/lib/codemirror.js"></script>
         <link rel="stylesheet" href="codemirror/lib/codemirror.css" />
+        <link rel="stylesheet" href="codemirror/theme/vibrant-ink.css" />
         <script type="text/javascript" src="codemirror/mode/python/python.js"></script>
 
         <script type="text/javascript" src="protocol.js"></script>
@@ -11,15 +12,37 @@
         <script type="text/javascript" src="diff_match_patch.js"></script>
 
         <style type="text/css">
-            #master, #loggedin, #secondheader {
+            #master, #loggedin {
                 display: none;
             }
 
-            #loggedinhidden {
+            #secondheader {
                 display: none;
-                margin: 0.5em;
+                padding: 0.5em;
                 font-size: 2em;
                 text-align: center;
+            }
+
+            #ide, #output {
+                position: absolute;
+                top: 0;
+                vertical-align: top;
+                padding: 0.2em;
+                margin: 0;
+            }
+
+            #ide {
+                display: inline-block;
+                left: 0;
+                right: 0;
+            }
+
+            #output {
+                display: none;
+                background: black;
+                color: white;
+                left: 50%;
+                right: 0;
             }
 
             .CodeMirror {
@@ -28,21 +51,28 @@
         </style>
     </head>
     <body style="margin: 0">
-        <div id="header">
-            <span id="master">
-                <form id="loginForm">
-                    <input type="password" id="loginPassword" />
-                    <input type="submit" id="loginSubmit" value="Log in" />
-                </form>
-            </span>
-            <span id="loggedin">
-                <button id="lock">Unlock</button>
-                <button id="hide">Hide</button>
-            </span>
-            <span id="loggedinhidden"></span>
+        <div id="headers">
+            <div id="header">
+                <span>
+                    <button id="run">Run</button>
+                </span>
+                <span id="master">
+                    <form id="loginForm" style="display: inline">
+                        <input type="password" id="loginPassword" />
+                        <input type="submit" id="loginSubmit" value="Log in" />
+                    </form>
+                </span>
+                <span id="loggedin">
+                    <button id="lock">Unlock</button>
+                    <button id="hide">Hide</button>
+                </span>
+            </div>
+            <div id="secondheader"></div>
+            <hr/>
         </div>
-        <div id="secondheader"></div>
-        <div id="ide" style="margin: 0.2em">Connecting...</div>
+        <div id="ide">Connecting...</div>
+        <div id="output">
+        </div>
         <script type="text/javascript" src="livede.js"></script>
     </body>
 </html>

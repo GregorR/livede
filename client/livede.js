@@ -19,22 +19,29 @@
 (function() {
     var dge = document.getElementById.bind(document);
     var prot = LiveDEProtocol;
+    var evals = window.LiveDEEval = {};
 
     // Library functions
     var dmp = new diff_match_patch();
     var sch = sjcl.codec.hex;
     var hash = sjcl.hash.sha256;
+    var evalable = {javascript: true};
 
     // Our critical elements
+    var headersUI = dge("headers");
+    var headerUI = dge("header");
+    var runUI = dge("run");
     var masterUI = dge("master");
     var logInFormUI = dge("loginForm");
     var logInPasswordUI = dge("loginPassword");
     var loggedInUI = dge("loggedin");
-    var loggedInHiddenUI = dge("loggedinhidden");
     var lockUI = dge("lock");
     var hideUI = dge("hide");
+    var secondHeaderUI = dge("secondheader");
     var ideUI = dge("ide");
+    var outputUI = dge("output");
     var ide = null;
+    var outputCM = null;
 
     // Local state
     var modeStates = {};
@@ -98,6 +105,7 @@
                 loggedIn = true;
                 if (doc && ide)
                     ide.setOption("readOnly", false);
+                updateUI();
                 break;
 
             case prot.ids.meta:
@@ -369,6 +377,7 @@
         });
 
         ideUI.style.fontSize = "3em";
+        outputUI.style.fontSize = "3em";
 
         ide.setValue(doc.data);
 
@@ -411,6 +420,13 @@
         document.head.appendChild(scr);
         scr.src = "codemirror/mode/" + mode + "/" + mode + ".js";
 
+        if (evalable[mode]) {
+            // Also load the eval code
+            var evalScr = document.createElement("script");
+            document.head.appendChild(evalScr);
+            evalScr.src = "eval/" + mode + ".js";
+        }
+
         function then() {
             modeStates[mode] = true;
             thenPrime();
@@ -419,9 +435,53 @@
 
     // UI setup
     function setupUI() {
+        runUI.onclick = run;
         logInFormUI.onsubmit = logIn;
         hideUI.onclick = hideMenu;
-        loggedInHiddenUI.onclick = showMenu;
+        secondHeaderUI.onclick = showMenu;
+        updateUI();
+    }
+
+    // Update the UI when it's changed in some way
+    function updateUI() {
+        setTimeout(function() {
+            var h = headersUI.offsetHeight;
+            ideUI.style.top = outputUI.style.top = h + "px";
+        }, 100);
+    }
+
+    // Run the code
+    function run() {
+        if (!doc || !doc.language || !evals[doc.language] || !ide) {
+            // I can't run this!
+            return;
+        }
+
+        // Show the output window
+        ideUI.style.right = "50%";
+        outputUI.style.display = "inline-block";
+
+        // Create the output "IDE"
+        if (!outputCM) {
+            outputCM = CodeMirror(outputUI, {
+                lineWrapping: true,
+                readOnly: true,
+                theme: "vibrant-ink",
+                viewportMargin: Infinity,
+                mode: doc.language
+            });
+        } else {
+            outputCM.setValue("");
+        }
+
+        // Get the code
+        var code = ide.getValue();
+
+        // Run it capturing output
+        evals[doc.language](code, function(str) {
+            // FIXME: This is a grotesque way to do this
+            outputCM.setValue(outputCM.getValue() + str);
+        });
     }
 
     // Request a login password
@@ -452,18 +512,19 @@
             url += "?doc=" + srch.get("doc");
 
         // Put it in the span
-        loggedInHiddenUI.innerText = url;
-        loggedInHiddenUI.appendChild(document.createElement("hr"));
+        secondHeaderUI.innerText = url;
 
         // And swap visibility
-        loggedInUI.style.display = "none";
-        loggedInHiddenUI.style.display = "block";
+        headerUI.style.display = "none";
+        secondHeaderUI.style.display = "block";
+        updateUI();
     }
 
     // Show the menu
     function showMenu() {
-        loggedInUI.style.display = "inline";
-        loggedInHiddenUI.style.display = "none";
+        headerUI.style.display = "block";
+        secondHeaderUI.style.display = "none";
+        updateUI();
     }
 
     // General text encoder
