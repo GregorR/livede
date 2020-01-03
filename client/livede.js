@@ -175,7 +175,11 @@
         } else {
             // Totally fresh document
             doc.data = newData;
-            var mode = doc.language || "javascript";
+            var mode = doc.language = doc.language || "javascript";
+
+            runUI.disabled = true;
+
+            // Load the mode and eval code if needed
             if (!(mode in modeStates)) {
                 // This mode is totally unloaded, so load it
                 loadModeThen(mode, loadIDE);
@@ -190,6 +194,10 @@
                 loadIDE();
 
             }
+
+            // Activate the run button if it's already loaded
+            if (evals[mode])
+                ruinUI.disabled = false;
 
         }
 
@@ -456,6 +464,9 @@
         if (evalable[mode]) {
             // Also load the eval code
             var evalScr = document.createElement("script");
+            evalScr.addEventListener("load", function() {
+                runUI.disabled = false;
+            });
             document.head.appendChild(evalScr);
             evalScr.src = "eval/" + mode + ".js";
         }
