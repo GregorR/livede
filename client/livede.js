@@ -21,6 +21,8 @@
     // Local state
     var modeStates = {};
     var doc = {};
+    var docHash = null;
+    var hashCheckTimeout = null;
     var salt = null, clientID = null;
     var loggedIn = false;
 
@@ -130,19 +132,144 @@
     // Received a diff
     function diff(msg) {
         var p = prot.diff;
-        var hash = msg.getUint32(p.hash, true);
+        var hash = msg.getInt32(p.hash, true);
         var patches = JSON.parse(decodeText(msg.buffer.slice(p.diff)));
 
         // FIXME: Need to worry about selection and hash!
         var from = doc.data;
         var fromLive = ide ? ide.getValue() : from;
-        doc.data = dmp.patch_apply(patches, from)[0];
+        var selections = ide ? ide.listSelections() : [];
         if (from !== fromLive) {
-            // Conflict in our own data, apply our patch separately
-            ide.setValue(dmp.patch_apply(patches, fromLive))[0];
+            // Conflict in our own data, apply patches to our canonical version and live version separately
+            doc.data = applyPatches(from, [], patches);
+            ide.setValue(applyPatches(fromLive, selections, patches));
+            ide.setSelections(selections);
         } else {
-            ide.setValue(doc.data);
+            doc.data = applyPatches(from, selections, patches);
+            if (ide) {
+                ide.setValue(doc.data);
+                ide.setSelections(selections);
+            }
         }
+    }
+
+    // Apply patches to data *and* selections
+    function applyPatches(data, selections, patches) {
+        // Modify our selections to exact locations instead of line + ch
+        var lines = data.split("\n");
+        var di = 0, si = 0, li, selection = selections[0];
+        for (li = 0; li < lines.length && selection; li++) {
+            while (selection) {
+                if (selection.anchor.line === li) {
+                    selection.anchor.exact = di + selection.anchor.ch;
+                    if (selection.head.line < li) {
+                        selection = selections[++si];
+                        continue;
+                    }
+
+                }
+
+                if (selection.head.line === li) {
+                    selection.head.exact = di + selection.head.ch;
+                    if (selection.anchor.line <= li) {
+                        selection = selections[++si];
+                        continue;
+                    }
+                }
+
+                break;
+            }
+
+            // Advance past this line
+            di += lines[li].length + 1; // + \n
+        }
+
+        // Now apply the patches
+        patches.forEach(function(patch) {
+            var step = dmp.patch_apply([patch], data);
+            if (!step[1][0]) {
+                // Patch failed!
+                return;
+            }
+
+            data = step[0];
+
+            // Now apply it to the selections
+            selections.forEach(function(selection) {
+                var from = selection.anchor.exact;
+                var to = selection.head.exact;
+                var swapped = false;
+                if (from > to) {
+                    from = to;
+                    to = selection.anchor.exact;
+                    swapped = true;
+                }
+                from = applyPatchSelection(from, patch, false);
+                to = applyPatchSelection(to, patch, true);
+                if (swapped) {
+                    selection.anchor.exact = to;
+                    selection.head.exact = from;
+                } else {
+                    selection.anchor.exact = from;
+                    selection.head.exact = to;
+                }
+            });
+        });
+
+        // Then un-exactify the selections again
+        lines = data.split("\n");
+        di = si = 0;
+        selection = selections[0];
+        for (li = 0; li < lines.length && selection; li++) {
+            var end = di + lines[li].length + 1;
+
+            while (selection) {
+                if (selection.anchor.exact < end) {
+                    // Anchor is on this line
+                    selection.anchor.line = li;
+                    selection.anchor.ch = selection.anchor.exact - di;
+                    if (selection.head.exact < di) {
+                        selection = selections[++si];
+                        continue;
+                    }
+                }
+
+                if (selection.head.exact < end) {
+                    // Head is on this line
+                    selection.head.line = li;
+                    selection.head.ch = selection.head.exact - di;
+                    if (selection.anchor.exact < end) {
+                        selection = selections[++si];
+                        continue;
+                    }
+                }
+
+                break;
+            }
+
+            di = end;
+        }
+
+        return data;
+    }
+
+    // Apply a patch to a selection part
+    function applyPatchSelection(loc, patch, right) {
+        if (loc < patch.start1) {
+            // Entirely left of the range of the patch
+
+        } else if (loc >= patch.start1 && loc <= patch.start1 + patch.length1) {
+            // Inside the range of the patch
+            if (right)
+                loc += patch.length2 - patch.length1;
+
+        } else {
+            // Entirely right of the range of the patch
+            loc += patch.length2 - patch.length1;
+
+        }
+
+        return loc;
     }
 
     // Load the IDE
