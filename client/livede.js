@@ -32,6 +32,8 @@
     var headerUI = dge("header");
     var runUI = dge("run");
     var lockUI = dge("lock");
+    var questionUI = dge("question");
+    var questionWindow = null;
     var masterUI = dge("master");
     var logInFormUI = dge("loginForm");
     var logInPasswordUI = dge("loginPassword");
@@ -155,6 +157,10 @@
                 doc.data = [doc.data[0]];
                 docHash = [docHash[0]];
                 updateStatusUI();
+                break;
+
+            case prot.ids.question:
+                recvQuestion(msg);
                 break;
         }
     };
@@ -293,6 +299,21 @@
 
         // And show it
         updateStatusUI();
+    }
+
+    // Receive a question message
+    function recvQuestion(msg) {
+        var p = prot.question;
+        var q = "";
+
+        // Do NOT trust the data. This is forwarded verbatim!
+        try {
+            q = decodeText(msg.buffer.slice(p.question)).replace(/\n/g, "\\n");
+        } catch (ex) {
+            return;
+        }
+
+        showQuestion(q);
     }
 
     // Apply patches to the whole document
@@ -559,6 +580,7 @@
     function setupUI() {
         runUI.onclick = run;
         lockUI.onclick = lockUnlock;
+        questionUI.onclick = question;
         logInFormUI.onsubmit = logIn;
         hideUI.onclick = hideMenu;
         forkSelectUI.onchange = selectFork;
@@ -762,6 +784,48 @@
         updateStatusUI();
         updateReadOnly();
         ide.focus();
+    }
+
+    // Ask a question or pop up the question panel
+    function question() {
+        if (loggedIn) {
+            showQuestion(null);
+            return;
+        }
+
+        // Prompt for a question to ask
+        var q = prompt("Question:", "");
+        if (q === "") return;
+
+        // Then send it
+        var p = prot.question;
+        var qbuf = encodeText(q);
+        var msg = new DataView(new ArrayBuffer(p.length + qbuf.length));
+        msg.setUint32(0, prot.ids.question, true);
+        new Uint8Array(msg.buffer).set(qbuf, p.question);
+        ws.send(msg);
+    }
+
+    // Show an asked question, popping open the window if needed
+    function showQuestion(q) {
+        // Show it if the window is there
+        if (questionWindow && !questionWindow.closed && questionWindow.questionPanel) {
+            if (q === null)
+                return; // Just showing the window
+            questionWindow.questionPanel.setValue(
+                questionWindow.questionPanel.getValue() + q + "\n\n"
+            );
+            return;
+        }
+
+        // If the window doesn't exist, open it
+        if (!questionWindow || questionWindow.closed) {
+            questionWindow = window.open("question-panel.html", "LiveDEQP",
+                "width=480,height=640,menubar=0,toolbar=0,location=0,personalbar=0,status=0");
+        }
+
+        // And delay the question asking
+        setTimeout(function() { showQuestion(q); }, 1000);
     }
 
     // Request a login password

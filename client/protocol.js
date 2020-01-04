@@ -36,6 +36,7 @@
 
             reqfull: 0x20,      // Hash mismatch, request full document
             join: 0x21,         // Indicates that there are no longer forks, S->C
+            question: 0x22,     // Anonymoous student question
         },
 
         handshake: {
@@ -107,6 +108,11 @@
         },
 
         join: {
+            length: 4
+        },
+
+        question: {
+            question: 4,
             length: 4
         }
     };

@@ -185,6 +185,10 @@ function connection(ws) {
                 reqFull(msg);
                 break;
 
+            case prot.ids.question:
+                question(msg);
+                break;
+
             default:
                 return ws.close();
         }
@@ -396,5 +400,12 @@ function connection(ws) {
         msg.writeUInt32LE(reqFork, p.fork);
         data.copy(msg, p.doc);
         ws.send(msg);
+    }
+
+    // Student question
+    function question(msg) {
+        // Forward it to all masters
+        for (var oid in docd.masters)
+            docd.onchange[oid](msg);
     }
 }
