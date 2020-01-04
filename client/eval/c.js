@@ -45,10 +45,13 @@
         currentPrint = print;
 
         // Run the given code
-        var ret = PicoC.picoc(code);
+        var ret = -1;
+        try {
+            ret = PicoC.picoc(code);
+        } catch (ex) {}
 
         // Flush stdout
-        PicoC.picoc("#include <stdio.h>\nvoid main() { fflush(stdout); }");
+        PicoC.picoc("#include <stdio.h>\nvoid main() { fflush(stdout); fflush(stderr); }");
 
         currentPrint = null;
         return ret;
