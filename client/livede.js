@@ -706,6 +706,8 @@
     function lockUnlock() {
         if (!ide) return;
 
+        var p, msg;
+
         if (local) {
             // We're already in local editing mode, so swap back to global mode
             local = false;
@@ -718,11 +720,29 @@
             applyPatches(0, patches);
 
         } else if (loggedIn) {
+            if (!doc.locked) {
+                // Before actually locking, accept the version we have
+                if (activeFork !== 0) {
+                    p = prot.cdiff;
+                    var from = doc.data[0];
+                    var to = doc.data[activeFork];
+                    doc.data[0] = doc.data[activeFork];
+                    var diff = dmp.diff_main(from, to);
+                    dmp.diff_cleanupEfficiency(diff);
+                    var patches = dmp.patch_make(from, diff);
+                    var pbuf = encodeText(dmp.patch_toText(patches));
+                    msg = new DataView(new ArrayBuffer(p.length + pbuf.length));
+                    msg.setUint32(0, prot.ids.cdiff, true);
+                    new Uint8Array(msg.buffer).set(pbuf, p.diff);
+                    ws.send(msg);
+                }
+            }
+
             // Prepare a lock/unlock message
-            var p = prot.metadiff;
+            p = prot.metadiff;
             var fieldBuf = encodeText("locked");
             var valueBuf = encodeText(JSON.stringify(!doc.locked));
-            var msg = new DataView(new ArrayBuffer(p.length + fieldBuf.length + valueBuf.length));
+            msg = new DataView(new ArrayBuffer(p.length + fieldBuf.length + valueBuf.length));
             msg.setUint32(0, prot.ids.metadiff, true);
             msg.setUint32(p.fieldLen, fieldBuf.length, true);
             new Uint8Array(msg.buffer).set(fieldBuf, p.field);
