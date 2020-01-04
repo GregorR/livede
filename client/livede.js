@@ -796,7 +796,7 @@
 
         // Prompt for a question to ask
         var q = prompt("Question:", "");
-        if (q === "") return;
+        if (q === null || q === "") return;
 
         // Then send it
         var p = prot.question;
