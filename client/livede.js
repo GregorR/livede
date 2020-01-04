@@ -25,7 +25,8 @@
     var dmp = new diff_match_patch();
     var sch = sjcl.codec.hex;
     var hash = sjcl.hash.sha256;
-    var evalable = {javascript: true, python: true};
+    var evalable = {javascript: true, python: true, c: true};
+    var languageToMode = {c: "clike"};
 
     // Our critical elements
     var headersUI = dge("headers");
@@ -226,14 +227,18 @@
                 newFork = true;
             }
             doc.data[forkNo] = newData;
-            var mode = doc.language = doc.language || "javascript";
+            var language = doc.language = doc.language || "javascript";
+            var mode = language;
+            if (language in languageToMode)
+                mode = languageToMode[language];
+            doc.mode = mode;
 
             runUI.disabled = true;
 
             // Load the mode and eval code if needed
             if (!(mode in modeStates)) {
                 // This mode is totally unloaded, so load it
-                loadModeThen(mode, loadIDE);
+                loadModeThen(mode, language, loadIDE);
 
             } else if (typeof modeStates[mode] !== "boolean") {
                 // Partially loaded, this is a script
@@ -491,7 +496,7 @@
 
     // Load the IDE
     function loadIDE() {
-        var mode = doc.language || "javascript";
+        var mode = doc.mode || "javascript";
 
         ideUI.innerHTML = "";
         ide = CodeMirror(ideUI, {
@@ -550,7 +555,7 @@
     }
 
     // Load a CodeMirror mode, then call the given function
-    function loadModeThen(mode, thenPrime) {
+    function loadModeThen(mode, language, thenPrime) {
         var scr = document.createElement("script");
         scr.addEventListener("load", then);
         scr.addEventListener("error", then);
@@ -558,14 +563,14 @@
         document.head.appendChild(scr);
         scr.src = "codemirror/mode/" + mode + "/" + mode + ".js";
 
-        if (evalable[mode]) {
+        if (evalable[language]) {
             // Also load the eval code
             var evalScr = document.createElement("script");
             evalScr.addEventListener("load", function() {
                 runUI.disabled = false;
             });
             document.head.appendChild(evalScr);
-            evalScr.src = "eval/" + mode + ".js";
+            evalScr.src = "eval/" + language + ".js";
         }
 
         function then() {
@@ -699,7 +704,7 @@
                 readOnly: true,
                 theme: "vibrant-ink",
                 viewportMargin: Infinity,
-                mode: doc.language
+                mode: doc.mode
             });
         } else {
             outputCM.setValue("");

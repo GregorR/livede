@@ -6,8 +6,9 @@ experiment with code while being taught.
 
 # Setup
 
-Setup is quite manual right now. You must install codemirror, fontawesome and
-pyodide as directories in the client code, and present the client code over any
+Setup is quite manual right now. You must install codemirror and fontawesome as
+directories in the client code, and for optional eval support, may install
+pyodide and picocjs as well. Then, simply present the client code over any
 standard HTTP server. A redirect rule helps: By default, if you access a path
 such as "/.../foo", it will look for a document named "foo". If you can't set
 up a redirect rule, you can use "?doc=foo" (search parameters) instead.
