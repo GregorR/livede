@@ -34,6 +34,8 @@
     var lockUI = dge("lock");
     var questionUI = dge("question");
     var questionWindow = null;
+    var zoominUI = dge("zoomin");
+    var zoomoutUI = dge("zoomout");
     var masterUI = dge("master");
     var logInFormUI = dge("loginForm");
     var logInPasswordUI = dge("loginPassword");
@@ -62,6 +64,8 @@
     /* If we're editing locally while other edits are also coming in, we wait a
      * second before checking for hash correctness */
     var checkHashTimeout = null;
+    // Zoom level
+    var zoom = 1;
     // Used for master login
     var salt = null, clientID = null;
     var loggedIn = false;
@@ -118,12 +122,7 @@
                 logInFormUI.style.display = "none";
                 loggedInUI.style.display = "inline";
                 loggedIn = true;
-                ideUI.style.fontSize = "3em";
-                if (ide)
-                    ide.refresh();
-                outputUI.style.fontSize = "3em";
-                if (outputCM)
-                    outputCM.refresh();
+                assertZoom();
                 updateStatusUI();
                 updateReadOnly();
                 break;
@@ -581,6 +580,8 @@
         runUI.onclick = run;
         lockUI.onclick = lockUnlock;
         questionUI.onclick = question;
+        zoominUI.onclick = zoomIn;
+        zoomoutUI.onclick = zoomOut;
         logInFormUI.onsubmit = logIn;
         hideUI.onclick = hideMenu;
         forkSelectUI.onchange = selectFork;
@@ -826,6 +827,47 @@
 
         // And delay the question asking
         setTimeout(function() { showQuestion(q); }, 1000);
+    }
+
+    // Zoom in
+    function zoomIn() {
+        zoom *= 1.25;
+        if (zoom > 5) zoom = 5;
+        assertZoom();
+    }
+
+    // Zoom out
+    function zoomOut() {
+        zoom /= 1.25;
+        if (zoom < 0.5) zoom = 0.5;
+        assertZoom();
+    }
+
+    // Set the zoom level
+    function assertZoom() {
+        if (zoom >= 0.81 && zoom <= 1.24) zoom = 1;
+
+        // The IDE is more zoomed for the master
+        var ideZoom = zoom;
+        if (loggedIn)
+            ideZoom *= 3;
+        else
+            ideZoom *= 1.5;
+
+        // Zoom the IDE elements
+        ideUI.style.fontSize = ideZoom + "em";
+        if (ide)
+            ide.refresh();
+        outputUI.style.fontSize = ideZoom + "em";
+        if (outputCM)
+            outputCM.refresh();
+
+        // Zoom the buttons
+        document.querySelectorAll("#header button").forEach(function(b) {
+            b.style.fontSize = zoom + "em";
+        });
+
+        updateUI();
     }
 
     // Request a login password
