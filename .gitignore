@@ -7,3 +7,4 @@ server/data/
 client/codemirror/
 client/fontawesome/
 client/pyodide/
+client/picocjs/
