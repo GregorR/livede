@@ -101,7 +101,7 @@ function connection(ws) {
 
         // Set up the document
         if (!(doc in docs))
-            docs[doc] = {onchange: {}, forkNos: {}, saveTimer: null, data: JSON.parse(fs.readFileSync(doc, "utf8"))};
+            docs[doc] = {onchange: {}, forkNos: {}, masters: {}, saveTimer: null, data: JSON.parse(fs.readFileSync(doc, "utf8"))};
         docd = docs[doc];
 
         if (!docd.data.meta)
@@ -145,6 +145,7 @@ function connection(ws) {
         var data = Buffer.from(docd.data.data[0]);
         msg = Buffer.alloc(p.length + data.length);
         msg.writeUInt32LE(prot.ids.full, 0);
+        msg.writeUInt32LE(0, p.fork);
         data.copy(msg, p.doc);
         ws.send(msg);
 
@@ -181,7 +182,7 @@ function connection(ws) {
                 break;
 
             case prot.ids.reqfull:
-                reqFull();
+                reqFull(msg);
                 break;
 
             default:
@@ -199,6 +200,7 @@ function connection(ws) {
     function onclose() {
         delete docd.onchange[id];
         delete docd.forkNos[id];
+        delete docd.masters[id];
         if (Object.keys(docd.onchange).length === 0)
             delete docs[doc];
     }
@@ -222,6 +224,7 @@ function connection(ws) {
                 var p = prot.diff;
                 msg = new Buffer(p.length + pbuf.length);
                 msg.writeUInt32LE(prot.ids.diff, 0);
+                msg.writeUInt32LE(forkNo, p.fork);
                 msg.writeInt32LE(hashed, p.hash);
                 pbuf.copy(msg, p.diff);
 
@@ -260,6 +263,7 @@ function connection(ws) {
             var out = Buffer.from(docd.data.data[forkNo]);
             msg = new Buffer(p.length + out.length);
             msg.writeUInt32LE(prot.ids.full, 0);
+            msg.writeUInt32LE(forkNo, p.fork);
             out.copy(msg, p.doc);
 
         }
@@ -267,7 +271,9 @@ function connection(ws) {
         // Push the change to other clients
         for (var oid in docd.onchange) {
             if (+oid !== id &&
-                (sendToAll || docd.forkNos[oid] === forkNo))
+                (sendToAll ||
+                 docd.forkNos[oid] === forkNo ||
+                 docd.masters[oid]))
                 docd.onchange[oid](msg);
         }
 
@@ -297,7 +303,7 @@ function connection(ws) {
             return ws.close();
 
         // Correct password, they're a master
-        master = true;
+        master = docd.masters[id] = true;
         var msg = new Buffer(p.length);
         msg.writeUInt32LE(prot.ids.loggedin, 0);
         ws.send(msg);
@@ -312,6 +318,15 @@ function connection(ws) {
             // Fork to a new version
             forkNo = docd.data.data.length;
             docd.data.data.push(docd.data.data[0]);
+
+            // And inform masters
+            var p = prot.fork;
+            var msg = new Buffer(p.length);
+            msg.writeUInt32LE(prot.ids.fork, 0);
+            msg.writeUInt32LE(0, p.from);
+            msg.writeUInt32LE(forkNo, p.to);
+            for (var oid in docd.masters)
+                docd.onchange[oid](msg);
         }
 
         return true;
@@ -345,6 +360,13 @@ function connection(ws) {
                 docd.forkNos[oid] = 0;
             forkNo = 0;
             pushChange();
+
+            // And indicate that we joined to any masters
+            p = prot.join;
+            var msg = new Buffer(p.length);
+            msg.writeUInt32LE(prot.ids.join, 0);
+            for (var oid in docd.masters)
+                docd.onchange[oid](msg);
         }
     }
 
@@ -364,11 +386,14 @@ function connection(ws) {
     }
 
     // Request for the full document
-    function reqFull() {
-        var p = prot.full;
-        var data = Buffer.from(docd.data.data[forkNo]);
-        var msg = Buffer.alloc(p.length + data.length);
+    function reqFull(msg) {
+        var p = prot.reqfull;
+        var reqFork = master ? msg.readUInt32LE(p.fork) : forkNo;
+
+        var data = Buffer.from(docd.data.data[reqFork]);
+        msg = Buffer.alloc(p.length + data.length);
         msg.writeUInt32LE(prot.ids.full, 0);
+        msg.writeUInt32LE(reqFork, p.fork);
         data.copy(msg, p.doc);
         ws.send(msg);
     }

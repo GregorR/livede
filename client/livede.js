@@ -49,8 +49,10 @@
     var modeStates = {};
     // The current canonical state of the document
     var doc = {};
-    // And its hash
-    var docHash = null;
+    // And its hash (per fork)
+    var docHash = [null];
+    // The fork we're seeing (only relevant for master)
+    var activeFork = 0;
     // True if we're in local-copy mode
     var local = false;
     /* If we're editing locally while other edits are also coming in, we wait a
@@ -141,6 +143,17 @@
             case prot.ids.hash:
                 recvHash(msg);
                 break;
+
+            case prot.ids.fork:
+                fork(msg);
+                break;
+
+            case prot.ids.join:
+                doc.data = [doc.data[0]];
+                docHash = [docHash[0]];
+                activeFork = 0;
+                // FIXME: Switch to this fork
+                break;
         }
     };
 
@@ -155,10 +168,10 @@
     function meta(msg) {
         var p = prot.meta;
         var newDoc = JSON.parse(decodeText(msg.buffer.slice(p.meta)));
-        if (doc) {
+        if (doc && doc.data) {
             newDoc.data = doc.data;
         } else {
-            newDoc.data = "";
+            newDoc.data = [""];
         }
         doc = newDoc;
         updateLockUI();
@@ -181,24 +194,29 @@
     // Received a full content update
     function full(msg) {
         var p = prot.full;
+        var forkNo = loggedIn ? msg.getUint32(p.fork, true) : 0;
         var newData = decodeText(msg.buffer.slice(p.doc));
         if (doc && ide) {
             // It's a full update to the existing doc.
             if (local) {
                 // Just take it, we're not watching anyway
-                doc.data = newData;
+                doc.data[forkNo] = newData;
 
             } else {
                 // Apply it by patches so we preserve our selection.
-                var diff = dmp.diff_main(doc.data, newData);
-                var patches = dmp.patch_make(doc.data, diff);
-                applyPatches(patches);
+                var diff = dmp.diff_main(doc.data[forkNo], newData);
+                var patches = dmp.patch_make(doc.data[forkNo], diff);
+                applyPatches(forkNo, patches);
 
             }
 
         } else {
             // Totally fresh document
-            doc.data = newData;
+            while (doc.data.length <= forkNo) {
+                doc.data.push(doc.data[0]);
+                docHash.push(null);
+            }
+            doc.data[forkNo] = newData;
             var mode = doc.language = doc.language || "javascript";
 
             runUI.disabled = true;
@@ -226,34 +244,56 @@
         }
 
         // Calculate the hash ourselves
-        docHash = hash.hash(doc.data)[0];
+        docHash[forkNo] = hash.hash(doc.data[forkNo])[0];
     }
 
     // Received a diff
     function diff(msg) {
         var p = prot.diff;
-        docHash = msg.getInt32(p.hash, true);
+        var forkNo = loggedIn ? msg.getUint32(p.fork, true) : 0;
+        docHash[forkNo] = msg.getInt32(p.hash, true);
         var patches = dmp.patch_fromText(decodeText(msg.buffer.slice(p.diff)));
-        applyPatches(patches);
+        applyPatches(forkNo, patches);
     }
 
     // Received only a hash
     function recvHash(msg) {
         var p = prot.hash;
-        docHash = msg.getInt32(p.hash, true);
+        docHash[0] = msg.getInt32(p.hash, true);
         if (checkHashTimeout)
             clearTimeout(checkHashTimeout);
         checkHashTimeout = setTimeout(checkHash, 1000);
     }
 
+    // Receive a new fork
+    function fork(msg) {
+        var p = prot.fork;
+        var from = msg.getUint32(p.from, true);
+        var to = msg.getUint32(p.to, true);
+
+        // Make the fork exist
+        while (doc.data.length <= to) {
+            doc.data.push(doc.data[0]);
+            docHash.push(null);
+        }
+        doc.data[to] = doc.data[from];
+
+        // Apply the diff if applicable
+        if (msg.length > p.length) {
+            var patches = dmp.patch_fromText(decodeText(msg.buffer.slice(p.diff)));
+            applyPatches(to, patches);
+        }
+    }
+
     // Apply patches to the whole document
-    function applyPatches(patches) {
-        var from = doc.data;
-        var fromLive = (ide && !local) ? ide.getValue() : from;
-        var selections = (ide && !local) ? ide.listSelections() : [];
+    function applyPatches(forkNo, patches) {
+        var from = doc.data[forkNo];
+        var updateIDE = (ide && !local && forkNo === activeFork);
+        var fromLive = updateIDE ? ide.getValue() : from;
+        var selections = updateIDE ? ide.listSelections() : [];
         if (from !== fromLive) {
             // Conflict in our own data, apply patches to our canonical version and live version separately
-            doc.data = applyPatchesPrime(from, [], patches);
+            doc.data[forkNo] = applyPatchesPrime(from, [], patches);
             ide.setValue(applyPatchesPrime(fromLive, selections, patches));
             ide.setSelections(selections);
 
@@ -263,9 +303,9 @@
             checkHashTimeout = setTimeout(checkHash, 1000);
 
         } else {
-            doc.data = applyPatchesPrime(from, selections, patches);
-            if (ide && !local) {
-                ide.setValue(doc.data);
+            doc.data[forkNo] = applyPatchesPrime(from, selections, patches);
+            if (updateIDE) {
+                ide.setValue(doc.data[forkNo]);
                 ide.setSelections(selections);
             }
 
@@ -396,22 +436,27 @@
 
     // Check that the hash matches, and request an update if it doesn't
     function checkHash() {
-        if (checkHashTimeout)
-            checkHashTimeout = null;
+        checkHashTimeout = null;
 
-        var localHash = hash.hash(doc.data)[0];
-        if (localHash === docHash) {
-            // No problem
-            return;
+        for (var forkNo = 0; forkNo < doc.data.length; forkNo++) {
+            if (docHash[forkNo] === null)
+                continue;
+
+            var localHash = hash.hash(doc.data[forkNo])[0];
+            if (localHash === docHash[forkNo]) {
+                // No problem
+                continue;
+            }
+
+            console.error("Hash mismatch!");
+
+            // Something is wrong!
+            var p = prot.reqfull;
+            var msg = new DataView(new ArrayBuffer(p.length));
+            msg.setUint32(0, prot.ids.reqfull, true);
+            msg.setUint32(p.fork, forkNo, true);
+            ws.send(msg);
         }
-
-        console.error("Hash mismatch!");
-
-        // Something is wrong!
-        var p = prot.reqfull;
-        var msg = new DataView(new ArrayBuffer(p.length));
-        msg.setUint32(0, prot.ids.reqfull, true);
-        ws.send(msg);
     }
 
     // Load the IDE
@@ -438,7 +483,7 @@
             }
         });
 
-        ide.setValue(doc.data);
+        ide.setValue(doc.data[0]);
 
         ide.on("change", localChange);
     }
@@ -458,10 +503,10 @@
         localChangeTimeout = null;
 
         // Get our change as patches
-        var from = doc.data;
+        var from = doc.data[0];
         var to = ide.getValue();
         if (from === to) return;
-        doc.data = to;
+        doc.data[0] = to;
         var diff = dmp.diff_main(from, to);
         dmp.diff_cleanupEfficiency(diff);
         var patches = dmp.patch_make(from, diff);
@@ -632,10 +677,10 @@
 
             // Revert by patching so we can preserve selections
             var cur = ide.getValue();
-            var diff = dmp.diff_main(cur, doc.data);
+            var diff = dmp.diff_main(cur, doc.data[0]);
             var patches = dmp.patch_make(cur, diff);
-            doc.data = cur;
-            applyPatches(patches);
+            doc.data[0] = cur;
+            applyPatches(0, patches);
 
         } else if (loggedIn) {
             // Prepare a lock/unlock message

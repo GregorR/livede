@@ -32,8 +32,10 @@
             diff: 0x13,         // Change to the document text, S->C
             cdiff: 0x14,        // Change to the document text, C->S (no hash)
             hash: 0x15,         // Just the updated hash, S->C
+            fork: 0x16,         // Indicate that a new fork exists, S->C
 
             reqfull: 0x20,      // Hash mismatch, request full document
+            join: 0x21,         // Indicates that there are no longer forks, S->C
         },
 
         handshake: {
@@ -63,8 +65,9 @@
         },
 
         full: {
-            doc: 4,
-            length: 4
+            fork: 4,
+            doc: 8,
+            length: 8
         },
 
         metadiff: {
@@ -75,9 +78,10 @@
         },
 
         diff: {
-            hash: 4,
-            diff: 8,
-            length: 8
+            fork: 4,
+            hash: 8,
+            diff: 12,
+            length: 12
         },
 
         cdiff: {
@@ -90,7 +94,19 @@
             length: 8
         },
 
+        fork: {
+            from: 4,
+            to: 8,
+            diff: 12,
+            length: 12
+        },
+
         reqfull: {
+            fork: 4,
+            length: 8
+        },
+
+        join: {
             length: 4
         }
     };
