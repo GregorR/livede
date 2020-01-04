@@ -521,7 +521,6 @@
     // There was a local change
     var localChangeTimeout = null;
     function localChange() {
-        outputClose();
         if (local || (loggedIn && !doc.locked)) {
             // Don't propagate our changes
             return;
