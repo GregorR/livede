@@ -26,7 +26,7 @@
     var sch = sjcl.codec.hex;
     var hash = sjcl.hash.sha256;
     var evalable = {javascript: true, python: true, c: true};
-    var languageToMode = {c: "clike"};
+    var languageToMode = {c: ["clike", "text/x-csrc"]};
 
     // Our critical elements
     var headersUI = dge("headers");
@@ -229,9 +229,15 @@
             doc.data[forkNo] = newData;
             var language = doc.language = doc.language || "javascript";
             var mode = language;
+            var mime = mode;
             if (language in languageToMode)
                 mode = languageToMode[language];
+            if (typeof mode === "object") {
+                mime = mode[1];
+                mode = mode[0];
+            }
             doc.mode = mode;
+            doc.mime = mime;
 
             runUI.disabled = true;
 
@@ -496,7 +502,7 @@
 
     // Load the IDE
     function loadIDE() {
-        var mode = doc.mode || "javascript";
+        var mode = doc.mime || "javascript";
 
         ideUI.innerHTML = "";
         ide = CodeMirror(ideUI, {
@@ -704,7 +710,7 @@
                 readOnly: true,
                 theme: "vibrant-ink",
                 viewportMargin: Infinity,
-                mode: doc.mode
+                mode: doc.mime
             });
         } else {
             outputCM.setValue("");
