@@ -106,6 +106,8 @@ function connection(ws) {
 
         if (!docd.data.meta)
             docd.data.meta = {locked: true};
+        if (!("locked" in docd.data.meta))
+            docd.data.meta.locked = true;
         if (!docd.data.data)
             docd.data.data = [""];
         if (docd.data.password && Object.keys(docd.onchange).length === 0) {
