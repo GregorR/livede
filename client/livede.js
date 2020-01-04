@@ -37,6 +37,8 @@
     var logInPasswordUI = dge("loginPassword");
     var loggedInUI = dge("loggedin");
     var hideUI = dge("hide");
+    var forkBoxUI = dge("forkbox");
+    var forkSelectUI = dge("forkselect");
     var secondHeaderUI = dge("secondheader");
     var ideUI = dge("ide");
     var outputUI = dge("output");
@@ -120,7 +122,7 @@
                 outputUI.style.fontSize = "3em";
                 if (outputCM)
                     outputCM.refresh();
-                updateLockUI();
+                updateStatusUI();
                 updateReadOnly();
                 break;
 
@@ -149,10 +151,10 @@
                 break;
 
             case prot.ids.join:
+                activateFork(0);
                 doc.data = [doc.data[0]];
                 docHash = [docHash[0]];
-                activeFork = 0;
-                // FIXME: Switch to this fork
+                updateStatusUI();
                 break;
         }
     };
@@ -174,7 +176,7 @@
             newDoc.data = [""];
         }
         doc = newDoc;
-        updateLockUI();
+        updateStatusUI();
     }
 
     // Received a partial metadata update
@@ -186,7 +188,7 @@
         doc[field] = value;
 
         if (field === "locked") {
-            updateLockUI();
+            updateStatusUI();
             updateReadOnly();
         }
     }
@@ -196,6 +198,7 @@
         var p = prot.full;
         var forkNo = loggedIn ? msg.getUint32(p.fork, true) : 0;
         var newData = decodeText(msg.buffer.slice(p.doc));
+        var newFork = false;
         if (doc && ide) {
             // It's a full update to the existing doc.
             if (local) {
@@ -215,6 +218,7 @@
             while (doc.data.length <= forkNo) {
                 doc.data.push(doc.data[0]);
                 docHash.push(null);
+                newFork = true;
             }
             doc.data[forkNo] = newData;
             var mode = doc.language = doc.language || "javascript";
@@ -245,6 +249,9 @@
 
         // Calculate the hash ourselves
         docHash[forkNo] = hash.hash(doc.data[forkNo])[0];
+
+        if (newFork)
+            updateStatusUI();
     }
 
     // Received a diff
@@ -283,6 +290,9 @@
             var patches = dmp.patch_fromText(decodeText(msg.buffer.slice(p.diff)));
             applyPatches(to, patches);
         }
+
+        // And show it
+        updateStatusUI();
     }
 
     // Apply patches to the whole document
@@ -492,7 +502,7 @@
     var localChangeTimeout = null;
     function localChange() {
         outputClose();
-        if (local) {
+        if (local || (loggedIn && !doc.locked)) {
             // Don't propagate our changes
             return;
         }
@@ -551,9 +561,10 @@
         lockUI.onclick = lockUnlock;
         logInFormUI.onsubmit = logIn;
         hideUI.onclick = hideMenu;
+        forkSelectUI.onchange = selectFork;
         secondHeaderUI.onclick = showMenu;
         outputCloseUI.onclick = outputClose;
-        updateLockUI();
+        updateStatusUI();
     }
 
     // Update the UI when it's changed in some way
@@ -565,8 +576,9 @@
     }
     window.addEventListener("resize", updateUI);
 
-    // Update the lock button to be consistent with the current state
-    function updateLockUI() {
+    // Update UI elements that reflect the current document status
+    function updateStatusUI() {
+        // (1) Lock/unlock/local button
         var h = '<i class="fas fa-';
         lockUI.disabled = false;
         if (local) {
@@ -599,6 +611,29 @@
             }
         }
         lockUI.innerHTML = h;
+
+        // (2) Fork selection
+        if (!doc || !doc.data || doc.data.length <= 1) {
+            // No forks
+            forkBoxUI.style.display = "none";
+            forkSelectUI.innerHTML = "";
+
+        } else {
+            forkBoxUI.style.display = "inline";
+
+            // Generate an item for each fork
+            while (forkSelectUI.children.length !== doc.data.length) {
+                var i = forkSelectUI.children.length;
+                var opt = document.createElement("option");
+                opt.value = i;
+                opt.innerText = i;
+                if (i === 0)
+                    opt.innerText = "Original";
+                forkSelectUI.appendChild(opt);
+            }
+
+        }
+
         updateUI();
     }
 
@@ -704,7 +739,7 @@
 
         }
 
-        updateLockUI();
+        updateStatusUI();
         updateReadOnly();
         ide.focus();
     }
@@ -756,6 +791,27 @@
         headerUI.style.display = "block";
         secondHeaderUI.style.display = "none";
         updateUI();
+    }
+
+    // Update the active fork by select box
+    function selectFork() {
+        var newActiveFork = +forkSelectUI.value;
+        if (newActiveFork === activeFork)
+            return;
+
+        activateFork(newActiveFork);
+    }
+
+    // Activate the given fork
+    function activateFork(newActiveFork) {
+        // Do it by patch to try to preserve our selection
+        var from = doc.data[activeFork];
+        var to = doc.data[newActiveFork];
+        activeFork = newActiveFork;
+        var diff = dmp.diff_main(from, to);
+        var patches = dmp.patch_make(from, diff);
+        doc.data[activeFork] = from;
+        applyPatches(activeFork, patches);
     }
 
     // General text encoder
