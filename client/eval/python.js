@@ -64,6 +64,7 @@
             `);
             pyodide.repr = pyodide.pyimport("repr");
             LiveDEEval.python = evaler;
+            LiveDEEval["python/ready"]();
         });
     }
 

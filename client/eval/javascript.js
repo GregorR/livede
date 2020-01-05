@@ -17,6 +17,8 @@
  */
 
 LiveDEEval.javascript = function(code, print) {
+    LiveDEEval["javascript/ready"]();
+
     // Replace console.log so the eval'd code can print
     var origLog = console.log;
     var func = null;

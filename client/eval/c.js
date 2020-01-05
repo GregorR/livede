@@ -33,6 +33,7 @@
     function onload() {
         // PicoC is loaded, so add the evaler
         LiveDEEval.c = evaler;
+        LiveDEEval["c/ready"]();
 
         // And set up stdout/stderr
         PicoC.FS.init(

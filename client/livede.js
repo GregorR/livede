@@ -569,12 +569,13 @@
         document.head.appendChild(scr);
         scr.src = "codemirror/mode/" + mode + "/" + mode + ".js";
 
-        if (evalable[language]) {
+        if (evalable[language] && !LiveDEEval[language]) {
             // Also load the eval code
-            var evalScr = document.createElement("script");
-            evalScr.addEventListener("load", function() {
+            LiveDEEval[language + "/ready"] = function() {
                 runUI.disabled = false;
-            });
+                delete LiveDEEval[language + "/ready"];
+            };
+            var evalScr = document.createElement("script");
             document.head.appendChild(evalScr);
             evalScr.src = "eval/" + language + ".js";
         }
