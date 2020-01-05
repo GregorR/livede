@@ -43,6 +43,9 @@
     document.head.appendChild(scr);
     scr.src = "pyodide/pyodide.js";
 
+    // Store the original heap so we can return to it every time
+    var origHeap = null;
+
     function onload() {
         // pyodide is loaded, so add the evaler
         languagePluginLoader.then(function() {
@@ -63,6 +66,9 @@
                 sys.stderr = sys.stdout
             `);
             pyodide.repr = pyodide.pyimport("repr");
+            origHeap = pyodide._module.HEAP8.slice(0);
+
+            // Make it available
             LiveDEEval.python = evaler;
             LiveDEEval["python/ready"]();
         });
@@ -70,6 +76,9 @@
 
     function evaler(code, print) {
         currentPrint = print;
+
+        // Reset the heap
+        pyodide._module.HEAP8.set(origHeap);
 
         // Run the given code
         pyodide.runPythonAsync(code).then(done).catch(done);
