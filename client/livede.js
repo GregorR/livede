@@ -27,11 +27,13 @@
     var hash = sjcl.hash.sha256;
     var evalable = {javascript: true, python: true, c: true};
     var languageToMode = {c: ["clike", "text/x-csrc"]};
+    var languageToExt = {javascript: "js", python: "py"};
 
     // Our critical elements
     var headersUI = dge("headers");
     var headerUI = dge("header");
     var runUI = dge("run");
+    var saveUI = dge("save");
     var lockUI = dge("lock");
     var questionUI = dge("question");
     var questionWindow = null;
@@ -88,7 +90,6 @@
 
     // Connect to the server
     var sec = (document.location.protocol==="https:")?"s":"";
-    console.error("ws" + sec + "://" + document.location.hostname + ":9843");
     var ws = new WebSocket("ws" + sec + "://" + document.location.hostname + ":9843");
     ws.binaryType = "arraybuffer";
 
@@ -230,14 +231,18 @@
             var language = doc.language = doc.language || "javascript";
             var mode = language;
             var mime = mode;
+            var ext = language
             if (language in languageToMode)
                 mode = languageToMode[language];
             if (typeof mode === "object") {
                 mime = mode[1];
                 mode = mode[0];
             }
+            if (language in languageToExt)
+                ext = languageToExt[language]
             doc.mode = mode;
             doc.mime = mime;
+            doc.ext = ext;
 
             runUI.disabled = true;
 
@@ -589,6 +594,7 @@
     // UI setup
     function setupUI() {
         runUI.onclick = run;
+        saveUI.onclick = save;
         lockUI.onclick = lockUnlock;
         questionUI.onclick = question;
         zoominUI.onclick = zoomIn;
@@ -734,6 +740,16 @@
 
         if (ide)
             ide.focus();
+    }
+
+    // Save the current state
+    function save() {
+        if (!ide) return;
+
+        var code = ide.getValue();
+        var blob = new Blob([code], {type: "text/plain;charset=utf-8"});
+        console.error(FileSaver);
+        saveAs(blob, docName + "." + doc.ext);
     }
 
     // Lock or unlock the document in all the various ways it can be locked or unlocked
