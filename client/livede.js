@@ -753,7 +753,6 @@
 
         var code = ide.getValue();
         var blob = new Blob([code], {type: "text/plain;charset=utf-8"});
-        console.error(FileSaver);
         saveAs(blob, docName + "." + doc.ext);
     }
 
