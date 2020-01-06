@@ -40,9 +40,10 @@ it will be salted and hashed when the document is first actually loaded.
 
 To load a document, load something like `index.html?doc=foo` in a browser, or a
 simpler URL using a redirect rule as described above. If the document exists,
-it will be displayed in a read-only code editor. From here, the interface
-changes depending on whether you're an instructor (herein called "master") or a
-student.
+it will be displayed in a read-only code editor, and can be run with the "run"
+button (if the language is supported for running in-browser) or saved with the
+"save" button. From here, the interface changes depending on whether you're an
+instructor (herein called "master") or a student.
 
 
 # Master interface
