@@ -336,12 +336,12 @@
         var from = doc.data[forkNo];
         var updateIDE = (ide && !local && forkNo === activeFork);
         var fromLive = updateIDE ? ide.getValue() : from;
+        var toLive;
         var selections = updateIDE ? ide.listSelections() : [];
         if (from !== fromLive) {
             // Conflict in our own data, apply patches to our canonical version and live version separately
             doc.data[forkNo] = applyPatchesPrime(from, [], patches);
-            ide.setValue(applyPatchesPrime(fromLive, selections, patches));
-            ide.setSelections(selections);
+            toLive = applyPatchesPrime(fromLive, selections, patches);
 
             // Can't check immediately with changes in-flight, so check after a second
             if (checkHashTimeout)
@@ -350,14 +350,19 @@
 
         } else {
             doc.data[forkNo] = applyPatchesPrime(from, selections, patches);
-            if (updateIDE) {
-                ide.setValue(doc.data[forkNo]);
-                ide.setSelections(selections);
-            }
+            toLive = doc.data[forkNo];
 
             // Check immediately
             if (!checkHashTimeout)
                 checkHash();
+        }
+
+        if (updateIDE) {
+            // Make sure we don't lose page scrolling
+            var x = window.scrollX, y = window.scrollY;
+            ide.setValue(toLive);
+            ide.setSelections(selections);
+            window.scroll(x, y);
         }
     }
 
