@@ -230,13 +230,15 @@
             doc.data[forkNo] = newData;
             var language = doc.language = doc.language || "javascript";
             var mode = language;
-            var mime = mode;
+            var mime;
             var ext = language
             if (language in languageToMode)
                 mode = languageToMode[language];
             if (typeof mode === "object") {
                 mime = mode[1];
                 mode = mode[0];
+            } else {
+                mime = mode;
             }
             if (language in languageToExt)
                 ext = languageToExt[language]
