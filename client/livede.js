@@ -753,6 +753,8 @@
             outputCM.setValue("");
         }
 
+        ide.refresh();
+
         // Get the code
         var code = ide.getValue();
 
@@ -768,8 +770,10 @@
         outputUI.style.display = "none";
         ideUI.style.right = "0";
 
-        if (ide)
+        if (ide) {
+            ide.refresh();
             ide.focus();
+        }
     }
 
     // Save the current state
