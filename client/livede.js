@@ -53,6 +53,29 @@
     var ide = null;
     var outputCM = null;
 
+    // Duplicate accesskeys so they can be used with some predictability
+    var accesskeys = {};
+    document.querySelectorAll("[accesskey]").forEach(function(el) {
+        accesskeys[el.accessKey] = el;
+    });
+    document.body.addEventListener("keydown", function(ev) {
+        // We only care if alt is down and the rest are not
+        if (!ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey)
+            return true;
+
+        // Of course, we only care if it's a key in our list
+        var key = ev.key.toLowerCase();
+        if (!(key in accesskeys))
+            return true;
+
+        ev.preventDefault();
+
+        var el = accesskeys[key];
+        el.focus();
+        el.click();
+        return false;
+    });
+
     // Local state
     // Which modes (languages) have we loaded?
     var modeStates = {};
